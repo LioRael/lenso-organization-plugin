@@ -3,13 +3,11 @@ name: CI
 on:
   pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   check:
-    name: Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:17-alpine
@@ -17,28 +15,32 @@ jobs:
           POSTGRES_DB: organization_ci
           POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_USER: postgres
-        ports:
-          - 5432:5432
+        ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres -d organization_ci"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
     steps:
-      - name: Checkout organization module
-        uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # stable
         with:
-          components: rustfmt
-
-      - name: Check Rust
-        env:
-          DATABASE_URL: postgres://postgres@127.0.0.1:5432/organization_ci
+          toolchain: 1.94.0
+          components: rustfmt,clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo check --locked --workspace --all-targets
+      - run: cargo test --locked --workspace
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - run: ./scripts/check-repository-boundary.sh
+      - name: Install exact App authoring CLI
+        run: cargo install lenso --version 0.2.31 --locked
+      - name: Resolve baseline and removal fixtures
         run: |
-          cargo fmt --all --check
-          cargo test --locked -p lenso-module-organization
-          cargo test --locked -p lenso-module-organization --features audit-log
-          cargo test --locked -p lenso-module-organization --all-features
-          cargo package --locked --no-verify -p lenso-module-organization
+          lenso check --project composition/baseline/lenso.json --execution-class lenso.native-rust@1
+          lenso resolve --project composition/baseline/lenso.json --execution-class lenso.native-rust@1 --output /tmp/organization-plan.json
+          lenso check --project composition/removal/lenso.json --execution-class lenso.native-rust@1
+          lenso resolve --project composition/removal/lenso.json --execution-class lenso.native-rust@1 --output /tmp/organization-removal-plan.json
+      - name: PostgreSQL acceptance
+        env:
+          LENSO_POSTGRES_TEST_URL: postgres://postgres@127.0.0.1:5432/organization_ci
+        run: cargo test --locked --workspace -- --include-ignored --test-threads=1

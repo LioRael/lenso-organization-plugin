@@ -1,40 +1,33 @@
-# Release Process
+# Release process
 
-This repository independently releases the `lenso-module-organization` Rust
-crate. It is not coordinated by a repository-wide release plan.
+The former `lenso-module-organization` line ended at its existing public crate
+versions and tags. The default branch now owns vNext packages with different
+identities; it must not republish or overwrite the legacy package.
 
-## Rust crate
+All vNext packages remain `publish = false` while the first vertical slice is
+under acceptance. The release workflow is therefore manual and dry-run-only.
+Before enabling publication:
 
-Release-plz runs on pushes to `main`:
+1. prove generated contract freshness, workspace tests, PostgreSQL acceptance,
+   repository boundary, and independent package verification;
+2. make the two Capability packages public before the implementation package;
+3. allocate each new crates.io name from a reviewed clean `main` checkout with
+   a temporary restricted token, then revoke it;
+4. configure crates.io Trusted Publishers for this repository and
+   `.github/workflows/release-plz.yml`; and
+5. replace the parked workflow only in a separately reviewed release change.
 
-1. `release-pr` opens or updates a release pull request for the crate.
-2. `release` publishes the version from a merged release pull request through
-   crates.io Trusted Publishing and creates the `<crate>@<version>` tag.
+Do not use `--no-verify`, a long-lived registry token, or Git dependencies as a
+publication shortcut.
 
-The crates.io registry is the source of truth for versions already published.
-Existing public versions, tags, and changelogs are not rewritten. No long-lived
-`CARGO_REGISTRY_TOKEN` is used by the workflow.
-
-Before enabling the first live publish, configure a crates.io Trusted Publisher
-for `lenso-module-organization` and verify that the repository and workflow
-claims match `.github/workflows/release-plz.yml`.
-
-The optional `audit-log` feature depends on the independently published
-`lenso-module-audit-log` crate. Publish or update that dependency before an
-organization release that enables the feature; this is a dependency constraint,
-not a shared release plan.
-
-## Local checks
+## Local gates
 
 ```sh
-cargo fmt --all --check
-cargo test --locked -p lenso-module-organization
-cargo test --locked -p lenso-module-organization --features audit-log
-cargo package --locked -p lenso-module-organization --allow-dirty
-cargo publish --dry-run --locked -p lenso-module-organization --allow-dirty
+cargo fmt --all -- --check
+cargo check --locked --workspace --all-targets
+cargo test --locked --workspace
+./scripts/check-repository-boundary.sh
 ```
 
-Cross-repository compatibility is proven by SemVer requirements, contracts,
-dependency updates, and focused integration checks. Do not restore a central
-publisher, shadow registry, nonce, or global release channel to repair a failed
-publication.
+Run PostgreSQL acceptance with `LENSO_POSTGRES_TEST_URL` and
+`--include-ignored --test-threads=1` before any package becomes public.

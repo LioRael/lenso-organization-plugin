@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["admin_callers", "database_url_secret", "schema"],
+  "properties": {
+    "admin_callers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "database_url_secret": { "type": "string" },
+    "schema": { "type": "string" }
+  },
+  "additionalProperties": false
+}
