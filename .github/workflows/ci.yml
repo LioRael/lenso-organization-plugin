@@ -33,7 +33,7 @@ jobs:
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: ./scripts/check-repository-boundary.sh
       - name: Install exact App authoring CLI
-        run: cargo install lenso --version 0.2.31 --locked
+        run: cargo install lenso-cli --version 0.2.34 --locked
       - name: Resolve baseline and removal fixtures
         run: |
           lenso check --project composition/baseline/lenso.json --execution-class lenso.native-rust@1
