@@ -110,22 +110,19 @@
       "capability_id": "lenso.secrets@1",
       "descriptor_version": "1.0.0",
       "descriptor": "../contracts/secrets/capability.json",
-      "rust": "../contracts/secrets/src/generated.rs",
-      "typescript": "../contracts/secrets/generated/bindings.ts"
+      "rust": "../contracts/secrets/src/generated.rs"
     },
     {
       "capability_id": "lenso.organization-admin@1",
       "descriptor_version": "1.0.0",
       "descriptor": "../../crates/lenso-capability-organization-admin/capability.json",
-      "rust": "../../crates/lenso-capability-organization-admin/src/generated.rs",
-      "typescript": "../contracts/organization-admin/generated/bindings.ts"
+      "rust": "../../crates/lenso-capability-organization-admin/src/generated.rs"
     },
     {
       "capability_id": "lenso.organization-access@1",
       "descriptor_version": "1.0.0",
       "descriptor": "../../crates/lenso-capability-organization-access/capability.json",
-      "rust": "../../crates/lenso-capability-organization-access/src/generated.rs",
-      "typescript": "../contracts/organization-access/generated/bindings.ts"
+      "rust": "../../crates/lenso-capability-organization-access/src/generated.rs"
     }
   ],
   "profiles": {}

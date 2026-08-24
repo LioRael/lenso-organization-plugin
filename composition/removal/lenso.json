@@ -34,8 +34,7 @@
       "capability_id": "lenso.secrets@1",
       "descriptor_version": "1.0.0",
       "descriptor": "../contracts/secrets/capability.json",
-      "rust": "../contracts/secrets/src/generated.rs",
-      "typescript": "../contracts/secrets/generated/bindings.ts"
+      "rust": "../contracts/secrets/src/generated.rs"
     }
   ],
   "profiles": {}
