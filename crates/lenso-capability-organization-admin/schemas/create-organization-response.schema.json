@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["organization_id", "owner_membership_id", "owner_role_id"],
+  "properties": {
+    "organization_id": { "type": "string" },
+    "owner_membership_id": { "type": "string" },
+    "owner_role_id": { "type": "string" }
+  },
+  "additionalProperties": false
+}
