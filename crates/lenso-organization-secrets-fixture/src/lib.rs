@@ -6,7 +6,7 @@ use lenso_capability_secrets::{
     ResolveError, ResolveRequest, Secrets, SecretsEndpoint, SecretsProvider,
 };
 use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture, RuntimeFailure};
-use lenso_native_adapter::{NativeModuleFactory, NativeModuleFactoryContext, NativeModuleInstance};
+use lenso_native_adapter::{NativePluginFactory, NativePluginFactoryContext, NativePluginInstance};
 
 pub const PACKAGE_ID: &str = "lenso.organization.fixture";
 pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -14,7 +14,7 @@ pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FixtureSecretsFactory;
 
-impl NativeModuleFactory for FixtureSecretsFactory {
+impl NativePluginFactory for FixtureSecretsFactory {
     fn package_id(&self) -> &'static str {
         PACKAGE_ID
     }
@@ -25,8 +25,8 @@ impl NativeModuleFactory for FixtureSecretsFactory {
 
     fn instantiate(
         &self,
-        context: NativeModuleFactoryContext<'_>,
-    ) -> Result<NativeModuleInstance, RuntimeFailure> {
+        context: NativePluginFactoryContext<'_>,
+    ) -> Result<NativePluginInstance, RuntimeFailure> {
         if context.configuration() != "{}" {
             return Err(RuntimeFailure::InvalidResolvedPlan {
                 detail: "Organization fixture accepts only empty configuration".to_owned(),
@@ -36,9 +36,9 @@ impl NativeModuleFactory for FixtureSecretsFactory {
             "secrets" => {
                 let endpoint =
                     Rc::new(SecretsEndpoint::new(FixtureSecrets)) as Rc<dyn NativeRequestEndpoint>;
-                Ok(NativeModuleInstance::new(vec![endpoint]))
+                Ok(NativePluginInstance::new(vec![endpoint]))
             }
-            "consumer" => Ok(NativeModuleInstance::new(Vec::new())),
+            "consumer" => Ok(NativePluginInstance::new(Vec::new())),
             other => Err(RuntimeFailure::InvalidResolvedPlan {
                 detail: format!("unsupported Organization fixture entrypoint `{other}`"),
             }),

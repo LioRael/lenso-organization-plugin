@@ -15,10 +15,10 @@ use lenso_capability_organization_admin::{
 };
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
 use lenso_kernel::{
-    DeactivateContext, InvocationContext, ModuleFuture, ModuleLifecycle, NativeRequestEndpoint,
-    NativeRequestFuture, PrepareContext, RuntimeFailure,
+    DeactivateContext, InvocationContext, NativeRequestEndpoint, NativeRequestFuture, PluginFuture,
+    PluginLifecycle, PrepareContext, RuntimeFailure,
 };
-use lenso_native_adapter::{NativeModuleFactory, NativeModuleFactoryContext, NativeModuleInstance};
+use lenso_native_adapter::{NativePluginFactory, NativePluginFactoryContext, NativePluginInstance};
 use lenso_postgres_kit::OwnedPostgres;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -94,7 +94,7 @@ pub enum OrganizationConfigError {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct OrganizationFactory;
 
-impl NativeModuleFactory for OrganizationFactory {
+impl NativePluginFactory for OrganizationFactory {
     fn package_id(&self) -> &'static str {
         PACKAGE_ID
     }
@@ -105,8 +105,8 @@ impl NativeModuleFactory for OrganizationFactory {
 
     fn instantiate(
         &self,
-        context: NativeModuleFactoryContext<'_>,
-    ) -> Result<NativeModuleInstance, RuntimeFailure> {
+        context: NativePluginFactoryContext<'_>,
+    ) -> Result<NativePluginInstance, RuntimeFailure> {
         if context.entrypoint() != "default" {
             return Err(RuntimeFailure::InvalidResolvedPlan {
                 detail: format!(
@@ -136,7 +136,7 @@ impl NativeModuleFactory for OrganizationFactory {
             Rc::new(OrganizationAdminEndpoint::new(provider.clone())),
             Rc::new(OrganizationAccessEndpoint::new(provider)),
         ];
-        Ok(NativeModuleInstance::with_lifecycle(
+        Ok(NativePluginInstance::with_lifecycle(
             endpoints,
             OrganizationLifecycle { config, state },
         ))
@@ -178,8 +178,8 @@ impl OrganizationProvider {
         self.state
             .borrow()
             .clone()
-            .ok_or(RuntimeFailure::ModuleFailure {
-                detail: "Organization Module is not prepared".to_owned(),
+            .ok_or(RuntimeFailure::PluginFailure {
+                detail: "Organization Plugin is not prepared".to_owned(),
             })
     }
 
@@ -321,8 +321,8 @@ struct OrganizationLifecycle {
     state: Rc<RefCell<Option<PreparedOrganization>>>,
 }
 
-impl ModuleLifecycle for OrganizationLifecycle {
-    fn prepare(&self, context: PrepareContext) -> ModuleFuture {
+impl PluginLifecycle for OrganizationLifecycle {
+    fn prepare(&self, context: PrepareContext) -> PluginFuture {
         let config = self.config.clone();
         let state = self.state.clone();
         let dependencies = context.dependencies().clone();
@@ -340,7 +340,7 @@ impl ModuleLifecycle for OrganizationLifecycle {
                 )
                 .await
                 .map_err(|error| match error {
-                    SecretsInvocationError::Domain(_) => RuntimeFailure::ModuleFailure {
+                    SecretsInvocationError::Domain(_) => RuntimeFailure::PluginFailure {
                         detail: format!(
                             "database URL secret `{}` was rejected",
                             config.database_url_secret
@@ -358,7 +358,7 @@ impl ModuleLifecycle for OrganizationLifecycle {
                 })?,
             )
             .await
-            .map_err(|error| RuntimeFailure::ModuleFailure {
+            .map_err(|error| RuntimeFailure::PluginFailure {
                 detail: error.to_string(),
             })?;
             state.replace(Some(PreparedOrganization { postgres }));
@@ -366,7 +366,7 @@ impl ModuleLifecycle for OrganizationLifecycle {
         })
     }
 
-    fn deactivate(&self, _context: DeactivateContext) -> ModuleFuture {
+    fn deactivate(&self, _context: DeactivateContext) -> PluginFuture {
         let prepared = self.state.borrow_mut().take();
         Box::pin(async move {
             if let Some(prepared) = prepared {
@@ -390,7 +390,7 @@ enum OrganizationError {
 }
 
 fn runtime(error: impl fmt::Display) -> RuntimeFailure {
-    RuntimeFailure::ModuleFailure {
+    RuntimeFailure::PluginFailure {
         detail: error.to_string(),
     }
 }
@@ -510,7 +510,7 @@ mod tests {
                 },
             )
             .await;
-        assert!(matches!(result, Err(RuntimeFailure::ModuleFailure { .. })));
+        assert!(matches!(result, Err(RuntimeFailure::PluginFailure { .. })));
     }
 
     #[tokio::test]

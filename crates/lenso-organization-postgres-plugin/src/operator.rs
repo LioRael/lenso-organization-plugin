@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use crate::schema::schema_plan;
 
-/// Explicit schema administration for the Organization Module.
+/// Explicit schema administration for the Organization Plugin.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct OrganizationOperator;
 

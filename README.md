@@ -1,4 +1,4 @@
-# Lenso Organization Module
+# Lenso Organization Plugin
 
 First-party Organization roles and PostgreSQL behavior for Lenso vNext. The
 default branch is vNext-only; the former `lenso-module-organization` releases
@@ -10,7 +10,7 @@ remain available through their existing crate versions and Git tags.
   `lenso.organization-admin@1` administrative role.
 - `lenso-capability-organization-access` owns the generated
   `lenso.organization-access@1` permission-query role.
-- `lenso-organization-postgres-module` atomically owns Organizations, roles,
+- `lenso-organization-postgres-plugin` atomically owns Organizations, roles,
   memberships, active slug uniqueness, and explicit schema administration.
 
 The Module requires one explicitly bound `lenso.secrets@1` provider during

@@ -1,8 +1,8 @@
-# vNext Organization Module card
+# vNext Organization Plugin card
 
 ## Owner and deletion boundary
 
-`lenso-organization-postgres-module` owns Organization identity, active slug
+`lenso-organization-postgres-plugin` owns Organization identity, active slug
 uniqueness, roles, permissions, memberships, and the transaction that creates
 an Organization with its first owner. Removing its package selection, Module
 Instance, bindings, and owned PostgreSQL schema removes all Organization
