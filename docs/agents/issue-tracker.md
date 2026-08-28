@@ -4,7 +4,7 @@ Issues and PRDs that drive this repository live in the central
 `LioRael/lenso` GitHub repository. Use the `gh` CLI with
 `--repo LioRael/lenso` for issue operations.
 
-Code pull requests live in `LioRael/lenso-organization-module`.
+Code pull requests live in `LioRael/lenso-organization-plugin`.
 
 ## Issue conventions
 
@@ -27,7 +27,7 @@ commit is reachable from the fetched target base.
 ## Cross-repository pull requests
 
 Implementation branches and pull requests for this repository target
-`LioRael/lenso-organization-module`.
+`LioRael/lenso-organization-plugin`.
 
 A pull request that implements a central Lenso ticket must use repo-qualified
 merge-time closure syntax:
