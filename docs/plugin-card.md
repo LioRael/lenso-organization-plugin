@@ -1,10 +1,10 @@
-# vNext Organization Module card
+# vNext Organization Plugin card
 
 ## Owner and deletion boundary
 
-`lenso-organization-postgres-module` owns Organization identity, active slug
+`lenso-organization-postgres-plugin` owns Organization identity, active slug
 uniqueness, roles, permissions, memberships, and the transaction that creates
-an Organization with its first owner. Removing its package selection, Module
+an Organization with its first owner. Removing its package selection, Plugin
 Instance, bindings, and owned PostgreSQL schema removes all Organization
 behavior and state; Kernel keeps no Organization branch or registry entry.
 
@@ -12,8 +12,8 @@ behavior and state; Kernel keeps no Organization branch or registry entry.
 
 - Provides `lenso.organization-admin@1` for explicitly allowed administrative
   callers to create an Organization and its first owner membership.
-- Provides `lenso.organization-access@1` so target Modules can ask whether an
-  Auth subject has one named permission. The target Module retains final
+- Provides `lenso.organization-access@1` so target Plugins can ask whether an
+  Auth subject has one named permission. The target Plugin retains final
   authorization authority.
 - Requires `lenso.secrets@1` during `prepare` to resolve the PostgreSQL URL.
 

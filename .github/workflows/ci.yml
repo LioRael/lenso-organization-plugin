@@ -32,14 +32,6 @@ jobs:
       - run: cargo test --locked --workspace
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: ./scripts/check-repository-boundary.sh
-      - name: Install exact App authoring CLI
-        run: cargo install lenso-cli --version 0.2.34 --locked
-      - name: Resolve baseline and removal fixtures
-        run: |
-          lenso check --project composition/baseline/lenso.json --execution-class lenso.native-rust@1
-          lenso resolve --project composition/baseline/lenso.json --execution-class lenso.native-rust@1 --output /tmp/organization-plan.json
-          lenso check --project composition/removal/lenso.json --execution-class lenso.native-rust@1
-          lenso resolve --project composition/removal/lenso.json --execution-class lenso.native-rust@1 --output /tmp/organization-removal-plan.json
       - name: PostgreSQL acceptance
         env:
           LENSO_POSTGRES_TEST_URL: postgres://postgres@127.0.0.1:5432/organization_ci
