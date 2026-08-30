@@ -1,6 +1,8 @@
 name: Release-plz
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       live:
@@ -22,7 +24,7 @@ concurrency:
 jobs:
   reject-unconfirmed-live-release:
     name: Reject unconfirmed live release
-    if: ${{ inputs.live && (inputs.confirm != 'publish' || github.ref != 'refs/heads/main') }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.live && (inputs.confirm != 'publish' || github.ref != 'refs/heads/main') }}
     runs-on: ubuntu-24.04
     steps:
       - name: Explain the rejected release
@@ -32,7 +34,7 @@ jobs:
 
   dry-run:
     name: Release dry-run
-    if: ${{ !inputs.live && github.ref == 'refs/heads/main' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.live && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -59,7 +61,7 @@ jobs:
 
   release:
     name: Publish crates
-    if: ${{ inputs.live && inputs.confirm == 'publish' && github.ref == 'refs/heads/main' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.live && inputs.confirm == 'publish' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -72,5 +74,25 @@ jobs:
         uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
         with:
           command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-plz-pr:
+    name: Release-plz PR
+    if: ${{ github.event_name == 'push' && github.repository_owner == 'LioRael' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - *checkout
+      - *install-rust
+      - name: Create release PR
+        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
+        with:
+          command: release-pr
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
