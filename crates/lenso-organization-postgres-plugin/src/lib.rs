@@ -9,9 +9,19 @@ use lenso_capability_organization_admin::{
     CreateOrganizationError, CreateOrganizationRequest, CreateOrganizationResponse,
     OrganizationAdmin, OrganizationAdminEndpoint, OrganizationAdminProvider,
 };
+use lenso_capability_organization_directory::{
+    GetOrganizationError, GetOrganizationRequest, GetOrganizationResponse, OrganizationDirectory,
+    OrganizationDirectoryEndpoint, OrganizationDirectoryProvider,
+};
 use lenso_capability_organization_membership::{
     CheckMembershipError, CheckMembershipRequest, CheckMembershipResponse, OrganizationMembership,
     OrganizationMembershipEndpoint, OrganizationMembershipProvider,
+};
+use lenso_capability_organization_membership_admin::{
+    AddMemberError, AddMemberRequest, AddMemberResponse, OrganizationMembershipAdminAddMember,
+    OrganizationMembershipAdminEndpoint, OrganizationMembershipAdminProvider,
+    OrganizationMembershipAdminRemoveMember, RemoveMemberError, RemoveMemberRequest,
+    RemoveMemberResponse,
 };
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
 use lenso_kernel::{
@@ -39,6 +49,10 @@ pub struct OrganizationConfig {
     database_url_secret: String,
     #[serde(default)]
     admin_callers: Vec<String>,
+    #[serde(default)]
+    directory_callers: Vec<String>,
+    #[serde(default)]
+    membership_admin_callers: Vec<String>,
 }
 
 impl OrganizationConfig {
@@ -51,9 +65,29 @@ impl OrganizationConfig {
             schema: schema.into(),
             database_url_secret: database_url_secret.into(),
             admin_callers,
+            directory_callers: Vec::new(),
+            membership_admin_callers: Vec::new(),
         };
         value.validate()?;
         Ok(value)
+    }
+
+    pub fn with_membership_admin_callers(
+        mut self,
+        membership_admin_callers: Vec<String>,
+    ) -> Result<Self, OrganizationConfigError> {
+        self.membership_admin_callers = membership_admin_callers;
+        self.validate()?;
+        Ok(self)
+    }
+
+    pub fn with_directory_callers(
+        mut self,
+        directory_callers: Vec<String>,
+    ) -> Result<Self, OrganizationConfigError> {
+        self.directory_callers = directory_callers;
+        self.validate()?;
+        Ok(self)
     }
 
     fn validate(&self) -> Result<(), OrganizationConfigError> {
@@ -69,6 +103,20 @@ impl OrganizationConfig {
         {
             return Err(OrganizationConfigError::InvalidAdminCallers);
         }
+        if self
+            .directory_callers
+            .iter()
+            .any(|value| !valid_name(value, 256))
+        {
+            return Err(OrganizationConfigError::InvalidDirectoryCallers);
+        }
+        if self
+            .membership_admin_callers
+            .iter()
+            .any(|value| !valid_name(value, 256))
+        {
+            return Err(OrganizationConfigError::InvalidMembershipAdminCallers);
+        }
         Ok(())
     }
 }
@@ -81,6 +129,10 @@ pub enum OrganizationConfigError {
     InvalidSecretReference,
     #[error("at least one valid Organization Admin caller is required")]
     InvalidAdminCallers,
+    #[error("every Organization Directory caller must be a valid Instance key")]
+    InvalidDirectoryCallers,
+    #[error("every Organization Membership Admin caller must be a valid Instance key")]
+    InvalidMembershipAdminCallers,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -123,10 +175,14 @@ impl NativePluginFactory for OrganizationFactory {
         let provider = OrganizationProvider {
             state: state.clone(),
             admin_callers: config.admin_callers.clone(),
+            directory_callers: config.directory_callers.clone(),
+            membership_admin_callers: config.membership_admin_callers.clone(),
         };
         let endpoints: Vec<Rc<dyn NativeRequestEndpoint>> = vec![
             Rc::new(OrganizationAdminEndpoint::new(provider.clone())),
-            Rc::new(OrganizationMembershipEndpoint::new(provider)),
+            Rc::new(OrganizationDirectoryEndpoint::new(provider.clone())),
+            Rc::new(OrganizationMembershipEndpoint::new(provider.clone())),
+            Rc::new(OrganizationMembershipAdminEndpoint::new(provider)),
         ];
         Ok(NativePluginInstance::with_lifecycle(
             endpoints,
@@ -153,6 +209,8 @@ impl fmt::Debug for PreparedOrganization {
 struct OrganizationProvider {
     state: Rc<RefCell<Option<PreparedOrganization>>>,
     admin_callers: Vec<String>,
+    directory_callers: Vec<String>,
+    membership_admin_callers: Vec<String>,
 }
 
 impl fmt::Debug for OrganizationProvider {
@@ -161,6 +219,11 @@ impl fmt::Debug for OrganizationProvider {
             .debug_struct("OrganizationProvider")
             .field("prepared", &self.state.borrow().is_some())
             .field("admin_caller_count", &self.admin_callers.len())
+            .field("directory_caller_count", &self.directory_callers.len())
+            .field(
+                "membership_admin_caller_count",
+                &self.membership_admin_callers.len(),
+            )
             .finish()
     }
 }
@@ -179,6 +242,25 @@ impl OrganizationProvider {
         context
             .caller_instance()
             .filter(|caller| self.admin_callers.iter().any(|allowed| allowed == *caller))
+    }
+
+    fn authorized_membership_admin_caller<'a>(
+        &self,
+        context: &'a InvocationContext,
+    ) -> Option<&'a str> {
+        context.caller_instance().filter(|caller| {
+            self.membership_admin_callers
+                .iter()
+                .any(|allowed| allowed == *caller)
+        })
+    }
+
+    fn authorized_directory_caller<'a>(&self, context: &'a InvocationContext) -> Option<&'a str> {
+        context.caller_instance().filter(|caller| {
+            self.directory_callers
+                .iter()
+                .any(|allowed| allowed == *caller)
+        })
     }
 }
 
@@ -206,6 +288,438 @@ impl OrganizationAdminProvider for OrganizationProvider {
             create_organization_in_postgres(prepared, caller_instance, request, name).await
         })
     }
+}
+
+impl OrganizationMembershipAdminProvider for OrganizationProvider {
+    fn add_member(
+        &self,
+        context: InvocationContext,
+        request: AddMemberRequest,
+    ) -> NativeRequestFuture<OrganizationMembershipAdminAddMember> {
+        let caller_instance = self
+            .authorized_membership_admin_caller(&context)
+            .map(str::to_owned);
+        let prepared = self.prepared();
+        Box::pin(async move {
+            let Some(caller_instance) = caller_instance else {
+                return Ok(Err(AddMemberError::Forbidden));
+            };
+            if !valid_membership_request(
+                &request.idempotency_key,
+                &request.organization_id,
+                &request.subject,
+            ) {
+                return Ok(Err(AddMemberError::InvalidRequest));
+            }
+            let prepared = prepared?;
+            add_member_in_postgres(prepared, caller_instance, request).await
+        })
+    }
+
+    fn remove_member(
+        &self,
+        context: InvocationContext,
+        request: RemoveMemberRequest,
+    ) -> NativeRequestFuture<OrganizationMembershipAdminRemoveMember> {
+        let caller_instance = self
+            .authorized_membership_admin_caller(&context)
+            .map(str::to_owned);
+        let prepared = self.prepared();
+        Box::pin(async move {
+            let Some(caller_instance) = caller_instance else {
+                return Ok(Err(RemoveMemberError::Forbidden));
+            };
+            if !valid_membership_request(
+                &request.idempotency_key,
+                &request.organization_id,
+                &request.subject,
+            ) {
+                return Ok(Err(RemoveMemberError::InvalidRequest));
+            }
+            let prepared = prepared?;
+            remove_member_in_postgres(prepared, caller_instance, request).await
+        })
+    }
+}
+
+impl OrganizationDirectoryProvider for OrganizationProvider {
+    fn get_organization(
+        &self,
+        context: InvocationContext,
+        request: GetOrganizationRequest,
+    ) -> NativeRequestFuture<OrganizationDirectory> {
+        let authorized = self.authorized_directory_caller(&context).is_some();
+        let prepared = self.prepared();
+        Box::pin(async move {
+            if !authorized {
+                return Ok(Err(GetOrganizationError::Forbidden));
+            }
+            if !valid_name(&request.organization_id, 256) {
+                return Ok(Err(GetOrganizationError::InvalidRequest));
+            }
+            let prepared = prepared?;
+            let row: Option<(String, String, bool, i64)> = sqlx::query_as(
+                "SELECT name,slug,archived_at IS NULL,revision FROM organizations WHERE organization_id=$1",
+            )
+            .bind(&request.organization_id)
+            .fetch_optional(prepared.postgres.pool())
+            .await
+            .map_err(|source| {
+                runtime(OrganizationError::Database {
+                    operation: "get organization directory entry",
+                    source,
+                })
+            })?;
+            let Some((name, slug, active, revision)) = row else {
+                return Ok(Err(GetOrganizationError::OrganizationNotFound));
+            };
+            Ok(Ok(GetOrganizationResponse {
+                active,
+                name,
+                organization_id: request.organization_id,
+                revision: revision.to_string(),
+                slug,
+            }))
+        })
+    }
+}
+
+#[derive(Debug)]
+enum MembershipCommandReplay {
+    Exact {
+        membership_id: String,
+        revision: i64,
+    },
+    Conflict,
+}
+
+async fn add_member_in_postgres(
+    prepared: PreparedOrganization,
+    caller_instance: String,
+    request: AddMemberRequest,
+) -> Result<Result<AddMemberResponse, AddMemberError>, RuntimeFailure> {
+    let generated_membership_id = random_id("member_").map_err(runtime)?;
+    let mut transaction = prepared
+        .postgres
+        .pool()
+        .begin()
+        .await
+        .map_err(|source| database_runtime("begin member addition", source))?;
+    let reserved = reserve_membership_command(
+        &mut transaction,
+        &caller_instance,
+        &request.idempotency_key,
+        "add_member",
+        &request.organization_id,
+        &request.subject,
+    )
+    .await?;
+    if !reserved {
+        let replay = read_membership_command_replay(
+            &mut transaction,
+            &caller_instance,
+            &request.idempotency_key,
+            "add_member",
+            &request.organization_id,
+            &request.subject,
+        )
+        .await?;
+        let MembershipCommandReplay::Exact {
+            membership_id,
+            revision,
+        } = replay
+        else {
+            return Ok(Err(AddMemberError::IdempotencyConflict));
+        };
+        transaction
+            .commit()
+            .await
+            .map_err(|source| database_runtime("commit member addition replay", source))?;
+        return Ok(Ok(AddMemberResponse {
+            created: false,
+            membership_id,
+            revision: revision.to_string(),
+        }));
+    }
+    if !lock_active_organization(&mut transaction, &request.organization_id).await? {
+        return Ok(Err(AddMemberError::OrganizationNotFound));
+    }
+    let existing: Option<(String, i64)> = sqlx::query_as(
+        "SELECT membership_id,revision FROM organization_memberships WHERE organization_id=$1 AND subject=$2 AND removed_at IS NULL FOR UPDATE",
+    )
+    .bind(&request.organization_id)
+    .bind(&request.subject)
+    .fetch_optional(&mut *transaction)
+    .await
+    .map_err(|source| {
+        runtime(OrganizationError::Database {
+            operation: "read active member for addition",
+            source,
+        })
+    })?;
+    let (membership_id, revision, created) = if let Some((membership_id, revision)) = existing {
+        (membership_id, revision, false)
+    } else {
+        sqlx::query(
+            "INSERT INTO organization_memberships (membership_id,organization_id,subject,is_owner,revision) VALUES ($1,$2,$3,false,1)",
+        )
+        .bind(&generated_membership_id)
+        .bind(&request.organization_id)
+        .bind(&request.subject)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|source| {
+            runtime(OrganizationError::Database {
+                operation: "insert organization member",
+                source,
+            })
+        })?;
+        (generated_membership_id, 1, true)
+    };
+    complete_membership_command(
+        &mut transaction,
+        &caller_instance,
+        &request.idempotency_key,
+        &membership_id,
+        revision,
+        created,
+    )
+    .await?;
+    transaction
+        .commit()
+        .await
+        .map_err(|source| database_runtime("commit member addition", source))?;
+    Ok(Ok(AddMemberResponse {
+        created,
+        membership_id,
+        revision: revision.to_string(),
+    }))
+}
+
+async fn remove_member_in_postgres(
+    prepared: PreparedOrganization,
+    caller_instance: String,
+    request: RemoveMemberRequest,
+) -> Result<Result<RemoveMemberResponse, RemoveMemberError>, RuntimeFailure> {
+    let mut transaction = prepared
+        .postgres
+        .pool()
+        .begin()
+        .await
+        .map_err(|source| database_runtime("begin member removal", source))?;
+    let reserved = reserve_membership_command(
+        &mut transaction,
+        &caller_instance,
+        &request.idempotency_key,
+        "remove_member",
+        &request.organization_id,
+        &request.subject,
+    )
+    .await?;
+    if !reserved {
+        let replay = read_membership_command_replay(
+            &mut transaction,
+            &caller_instance,
+            &request.idempotency_key,
+            "remove_member",
+            &request.organization_id,
+            &request.subject,
+        )
+        .await?;
+        let MembershipCommandReplay::Exact {
+            membership_id,
+            revision,
+        } = replay
+        else {
+            return Ok(Err(RemoveMemberError::IdempotencyConflict));
+        };
+        transaction
+            .commit()
+            .await
+            .map_err(|source| database_runtime("commit member removal replay", source))?;
+        return Ok(Ok(RemoveMemberResponse {
+            membership_id,
+            removed: false,
+            revision: revision.to_string(),
+        }));
+    }
+    if !lock_active_organization(&mut transaction, &request.organization_id).await? {
+        return Ok(Err(RemoveMemberError::OrganizationNotFound));
+    }
+    let existing: Option<(String, bool, i64)> = sqlx::query_as(
+        "SELECT membership_id,is_owner,revision FROM organization_memberships WHERE organization_id=$1 AND subject=$2 AND removed_at IS NULL FOR UPDATE",
+    )
+    .bind(&request.organization_id)
+    .bind(&request.subject)
+    .fetch_optional(&mut *transaction)
+    .await
+    .map_err(|source| {
+        runtime(OrganizationError::Database {
+            operation: "read active member for removal",
+            source,
+        })
+    })?;
+    let Some((membership_id, is_owner, revision)) = existing else {
+        return Ok(Err(RemoveMemberError::MembershipNotFound));
+    };
+    if is_owner {
+        return Ok(Err(RemoveMemberError::OwnerProtected));
+    }
+    let next_revision = next_membership_revision(revision)?;
+    sqlx::query(
+        "UPDATE organization_memberships SET removed_at=transaction_timestamp(),updated_at=transaction_timestamp(),revision=$3 WHERE organization_id=$1 AND membership_id=$2 AND removed_at IS NULL",
+    )
+    .bind(&request.organization_id)
+    .bind(&membership_id)
+    .bind(next_revision)
+    .execute(&mut *transaction)
+    .await
+    .map_err(|source| {
+        runtime(OrganizationError::Database {
+            operation: "remove organization member",
+            source,
+        })
+    })?;
+    complete_membership_command(
+        &mut transaction,
+        &caller_instance,
+        &request.idempotency_key,
+        &membership_id,
+        next_revision,
+        true,
+    )
+    .await?;
+    transaction
+        .commit()
+        .await
+        .map_err(|source| database_runtime("commit member removal", source))?;
+    Ok(Ok(RemoveMemberResponse {
+        membership_id,
+        removed: true,
+        revision: next_revision.to_string(),
+    }))
+}
+
+async fn reserve_membership_command(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    caller_instance: &str,
+    idempotency_key: &str,
+    operation: &str,
+    organization_id: &str,
+    subject: &str,
+) -> Result<bool, RuntimeFailure> {
+    sqlx::query(
+        "INSERT INTO organization_membership_commands (caller_instance,idempotency_key,operation,organization_id,subject) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (caller_instance,idempotency_key) DO NOTHING",
+    )
+    .bind(caller_instance)
+    .bind(idempotency_key)
+    .bind(operation)
+    .bind(organization_id)
+    .bind(subject)
+    .execute(&mut **transaction)
+    .await
+    .map(|result| result.rows_affected() == 1)
+    .map_err(|source| {
+        runtime(OrganizationError::Database {
+            operation: "reserve membership command",
+            source,
+        })
+    })
+}
+
+async fn read_membership_command_replay(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    caller_instance: &str,
+    idempotency_key: &str,
+    operation: &str,
+    organization_id: &str,
+    subject: &str,
+) -> Result<MembershipCommandReplay, RuntimeFailure> {
+    let row: (
+        String,
+        String,
+        String,
+        Option<String>,
+        Option<i64>,
+        Option<bool>,
+    ) = sqlx::query_as(
+        "SELECT operation,organization_id,subject,membership_id,result_revision,changed FROM organization_membership_commands WHERE caller_instance=$1 AND idempotency_key=$2 FOR UPDATE",
+    )
+    .bind(caller_instance)
+    .bind(idempotency_key)
+    .fetch_one(&mut **transaction)
+    .await
+    .map_err(|source| {
+        runtime(OrganizationError::Database {
+            operation: "read membership command replay",
+            source,
+        })
+    })?;
+    if row.0 != operation || row.1 != organization_id || row.2 != subject {
+        return Ok(MembershipCommandReplay::Conflict);
+    }
+    let (Some(membership_id), Some(revision), Some(_changed)) = (row.3, row.4, row.5) else {
+        return Err(runtime(OrganizationError::Invariant {
+            detail: "committed membership command has no result",
+        }));
+    };
+    Ok(MembershipCommandReplay::Exact {
+        membership_id,
+        revision,
+    })
+}
+
+async fn complete_membership_command(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    caller_instance: &str,
+    idempotency_key: &str,
+    membership_id: &str,
+    revision: i64,
+    changed: bool,
+) -> Result<(), RuntimeFailure> {
+    sqlx::query(
+        "UPDATE organization_membership_commands SET membership_id=$3,result_revision=$4,changed=$5,completed_at=transaction_timestamp() WHERE caller_instance=$1 AND idempotency_key=$2 AND completed_at IS NULL",
+    )
+    .bind(caller_instance)
+    .bind(idempotency_key)
+    .bind(membership_id)
+    .bind(revision)
+    .bind(changed)
+    .execute(&mut **transaction)
+    .await
+    .and_then(|result| {
+        if result.rows_affected() == 1 {
+            Ok(result)
+        } else {
+            Err(sqlx::Error::RowNotFound)
+        }
+    })
+    .map(|_| ())
+    .map_err(|source| {
+        runtime(OrganizationError::Database {
+            operation: "complete membership command",
+            source,
+        })
+    })
+}
+
+async fn lock_active_organization(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    organization_id: &str,
+) -> Result<bool, RuntimeFailure> {
+    sqlx::query_scalar::<_, bool>(
+        "SELECT archived_at IS NULL FROM organizations WHERE organization_id=$1 FOR UPDATE",
+    )
+    .bind(organization_id)
+    .fetch_optional(&mut **transaction)
+    .await
+    .map(|value| value.unwrap_or(false))
+    .map_err(|source| {
+        runtime(OrganizationError::Database {
+            operation: "lock organization for membership command",
+            source,
+        })
+    })
 }
 
 async fn create_organization_in_postgres(
@@ -495,12 +1009,26 @@ enum OrganizationError {
     },
     #[error("random source unavailable")]
     Random,
+    #[error("Organization invariant failed: {detail}")]
+    Invariant { detail: &'static str },
 }
 
 fn runtime(error: impl fmt::Display) -> RuntimeFailure {
     RuntimeFailure::PluginFailure {
         detail: error.to_string(),
     }
+}
+
+fn database_runtime(operation: &'static str, source: sqlx::Error) -> RuntimeFailure {
+    runtime(OrganizationError::Database { operation, source })
+}
+
+fn next_membership_revision(revision: i64) -> Result<i64, RuntimeFailure> {
+    revision.checked_add(1).ok_or_else(|| {
+        runtime(OrganizationError::Invariant {
+            detail: "membership revision overflow",
+        })
+    })
 }
 
 fn random_id(prefix: &str) -> Result<String, OrganizationError> {
@@ -535,6 +1063,10 @@ fn valid_name(value: &str, max: usize) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b':'))
+}
+
+fn valid_membership_request(idempotency_key: &str, organization_id: &str, subject: &str) -> bool {
+    valid_name(idempotency_key, 256) && valid_name(organization_id, 256) && valid_name(subject, 256)
 }
 
 fn valid_secret_reference(reference: &str) -> bool {
@@ -576,6 +1108,19 @@ mod tests {
     }
 
     #[test]
+    fn configuration_rejects_invalid_directory_caller_keys() {
+        let error = OrganizationConfig::new(
+            "organization",
+            "organization/database",
+            vec!["business-admin".to_owned()],
+        )
+        .unwrap()
+        .with_directory_callers(vec!["invalid caller".to_owned()])
+        .unwrap_err();
+        assert_eq!(error, OrganizationConfigError::InvalidDirectoryCallers);
+    }
+
+    #[test]
     fn slugs_are_stable_and_narrow() {
         assert!(valid_slug("acme-platform"));
         assert!(!valid_slug("Acme Platform"));
@@ -592,6 +1137,8 @@ mod tests {
         let provider = OrganizationProvider {
             state: Rc::new(RefCell::new(None)),
             admin_callers: vec!["business-admin".to_owned()],
+            directory_callers: Vec::new(),
+            membership_admin_callers: Vec::new(),
         };
         let context = InvocationContext::new(1, None, CancellationToken::new())
             .with_caller_instance("untrusted");
@@ -615,6 +1162,8 @@ mod tests {
         let provider = OrganizationProvider {
             state: Rc::new(RefCell::new(None)),
             admin_callers: vec!["business-admin".to_owned()],
+            directory_callers: Vec::new(),
+            membership_admin_callers: Vec::new(),
         };
         let context = InvocationContext::new(1, None, CancellationToken::new())
             .with_caller_instance("business-admin");
@@ -634,10 +1183,122 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn forbidden_membership_admin_is_a_domain_error_before_storage_access() {
+        let provider = OrganizationProvider {
+            state: Rc::new(RefCell::new(None)),
+            admin_callers: vec!["business-admin".to_owned()],
+            directory_callers: Vec::new(),
+            membership_admin_callers: vec!["membership-admin".to_owned()],
+        };
+        let context = InvocationContext::new(1, None, CancellationToken::new())
+            .with_caller_instance("untrusted");
+
+        let add = provider
+            .add_member(
+                context.clone(),
+                AddMemberRequest {
+                    idempotency_key: "add-member".to_owned(),
+                    organization_id: "org_acme".to_owned(),
+                    subject: "usr_member".to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(add, Err(AddMemberError::Forbidden));
+
+        let remove = provider
+            .remove_member(
+                context,
+                RemoveMemberRequest {
+                    idempotency_key: "remove-member".to_owned(),
+                    organization_id: "org_acme".to_owned(),
+                    subject: "usr_member".to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(remove, Err(RemoveMemberError::Forbidden));
+    }
+
+    #[tokio::test]
+    async fn invalid_membership_admin_request_is_rejected_before_storage_access() {
+        let provider = OrganizationProvider {
+            state: Rc::new(RefCell::new(None)),
+            admin_callers: vec!["business-admin".to_owned()],
+            directory_callers: Vec::new(),
+            membership_admin_callers: vec!["membership-admin".to_owned()],
+        };
+        let context = InvocationContext::new(1, None, CancellationToken::new())
+            .with_caller_instance("membership-admin");
+
+        let add = provider
+            .add_member(
+                context.clone(),
+                AddMemberRequest {
+                    idempotency_key: String::new(),
+                    organization_id: "org_acme".to_owned(),
+                    subject: "usr_member".to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(add, Err(AddMemberError::InvalidRequest));
+
+        let remove = provider
+            .remove_member(
+                context,
+                RemoveMemberRequest {
+                    idempotency_key: "remove-member".to_owned(),
+                    organization_id: "org_acme".to_owned(),
+                    subject: "invalid subject".to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(remove, Err(RemoveMemberError::InvalidRequest));
+    }
+
+    #[tokio::test]
+    async fn directory_authorization_and_validation_happen_before_storage_access() {
+        let provider = OrganizationProvider {
+            state: Rc::new(RefCell::new(None)),
+            admin_callers: vec!["business-admin".to_owned()],
+            directory_callers: vec!["directory-consumer".to_owned()],
+            membership_admin_callers: Vec::new(),
+        };
+        let request = GetOrganizationRequest {
+            organization_id: "org_acme".to_owned(),
+        };
+        let forbidden = provider
+            .get_organization(
+                InvocationContext::new(1, None, CancellationToken::new())
+                    .with_caller_instance("untrusted"),
+                request,
+            )
+            .await
+            .unwrap();
+        assert_eq!(forbidden, Err(GetOrganizationError::Forbidden));
+
+        let invalid = provider
+            .get_organization(
+                InvocationContext::new(2, None, CancellationToken::new())
+                    .with_caller_instance("directory-consumer"),
+                GetOrganizationRequest {
+                    organization_id: String::new(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(invalid, Err(GetOrganizationError::InvalidRequest));
+    }
+
+    #[tokio::test]
     async fn unprepared_membership_reports_runtime_failure() {
         let provider = OrganizationProvider {
             state: Rc::new(RefCell::new(None)),
             admin_callers: vec!["business-admin".to_owned()],
+            directory_callers: Vec::new(),
+            membership_admin_callers: Vec::new(),
         };
         let result = provider
             .check_membership(
@@ -670,6 +1331,8 @@ mod tests {
         let provider = OrganizationProvider {
             state: Rc::new(RefCell::new(Some(PreparedOrganization { postgres }))),
             admin_callers: vec!["business-admin".to_owned(), "second-admin".to_owned()],
+            directory_callers: vec!["directory-consumer".to_owned()],
+            membership_admin_callers: vec!["membership-admin".to_owned()],
         };
         let admin_context = InvocationContext::new(1, None, CancellationToken::new())
             .with_caller_instance("business-admin");
@@ -769,6 +1432,293 @@ mod tests {
             .unwrap();
         assert_eq!(duplicate, Err(CreateOrganizationError::SlugConflict));
 
+        let cleanup_pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+        cleanup_pool
+            .execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))
+            .await
+            .unwrap();
+        cleanup_pool.close().await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires LENSO_POSTGRES_TEST_URL"]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "the acceptance scenario keeps membership concurrency, replay, and owner protection together"
+    )]
+    async fn membership_admin_is_caller_scoped_idempotent_and_owner_safe() {
+        let database_url =
+            std::env::var("LENSO_POSTGRES_TEST_URL").expect("LENSO_POSTGRES_TEST_URL is required");
+        let schema = random_id("org_member_test_").unwrap();
+        OrganizationOperator::setup(&database_url, &schema)
+            .await
+            .unwrap();
+        let postgres = OwnedPostgres::prepare(&database_url, schema_plan(schema.clone()).unwrap())
+            .await
+            .unwrap();
+        let provider = OrganizationProvider {
+            state: Rc::new(RefCell::new(Some(PreparedOrganization { postgres }))),
+            admin_callers: vec!["business-admin".to_owned()],
+            directory_callers: vec!["directory-consumer".to_owned()],
+            membership_admin_callers: vec![
+                "membership-admin".to_owned(),
+                "second-membership-admin".to_owned(),
+            ],
+        };
+        let organization = provider
+            .create_organization(
+                InvocationContext::new(1, None, CancellationToken::new())
+                    .with_caller_instance("business-admin"),
+                CreateOrganizationRequest {
+                    idempotency_key: "create-membership-test".to_owned(),
+                    name: "Membership Test".to_owned(),
+                    owner_subject: "usr_owner".to_owned(),
+                    slug: "membership-test".to_owned(),
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        let directory_entry = provider
+            .get_organization(
+                InvocationContext::new(2, None, CancellationToken::new())
+                    .with_caller_instance("directory-consumer"),
+                GetOrganizationRequest {
+                    organization_id: organization.organization_id.clone(),
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(directory_entry.active);
+        assert_eq!(directory_entry.name, "Membership Test");
+        assert_eq!(directory_entry.slug, "membership-test");
+        assert_eq!(directory_entry.revision, "1");
+
+        let missing_directory_entry = provider
+            .get_organization(
+                InvocationContext::new(3, None, CancellationToken::new())
+                    .with_caller_instance("directory-consumer"),
+                GetOrganizationRequest {
+                    organization_id: "org_missing".to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            missing_directory_entry,
+            Err(GetOrganizationError::OrganizationNotFound)
+        );
+        let add_request = AddMemberRequest {
+            idempotency_key: "add-primary-member".to_owned(),
+            organization_id: organization.organization_id.clone(),
+            subject: "usr_member".to_owned(),
+        };
+        let first_add = provider.add_member(
+            InvocationContext::new(4, None, CancellationToken::new())
+                .with_caller_instance("membership-admin"),
+            add_request.clone(),
+        );
+        let concurrent_replay = provider.add_member(
+            InvocationContext::new(5, None, CancellationToken::new())
+                .with_caller_instance("membership-admin"),
+            add_request.clone(),
+        );
+        let (first_add, concurrent_replay) = tokio::join!(first_add, concurrent_replay);
+        let first_add = first_add.unwrap().unwrap();
+        let concurrent_replay = concurrent_replay.unwrap().unwrap();
+        assert_ne!(first_add.created, concurrent_replay.created);
+        assert_eq!(first_add.membership_id, concurrent_replay.membership_id);
+        assert_eq!(first_add.revision, "1");
+        assert_eq!(concurrent_replay.revision, "1");
+
+        let active = provider
+            .check_membership(
+                InvocationContext::new(4, None, CancellationToken::new()),
+                CheckMembershipRequest {
+                    organization_id: organization.organization_id.clone(),
+                    subject: "usr_member".to_owned(),
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(active.active);
+        assert!(!active.owner);
+
+        let conflict = provider
+            .add_member(
+                InvocationContext::new(5, None, CancellationToken::new())
+                    .with_caller_instance("membership-admin"),
+                AddMemberRequest {
+                    subject: "usr_other".to_owned(),
+                    ..add_request.clone()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(conflict, Err(AddMemberError::IdempotencyConflict));
+
+        let second_caller = provider
+            .add_member(
+                InvocationContext::new(6, None, CancellationToken::new())
+                    .with_caller_instance("second-membership-admin"),
+                AddMemberRequest {
+                    subject: "usr_second".to_owned(),
+                    ..add_request.clone()
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(second_caller.created);
+
+        let owner_removal = provider
+            .remove_member(
+                InvocationContext::new(7, None, CancellationToken::new())
+                    .with_caller_instance("membership-admin"),
+                RemoveMemberRequest {
+                    idempotency_key: "remove-owner".to_owned(),
+                    organization_id: organization.organization_id.clone(),
+                    subject: "usr_owner".to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(owner_removal, Err(RemoveMemberError::OwnerProtected));
+
+        let remove_request = RemoveMemberRequest {
+            idempotency_key: "remove-primary-member".to_owned(),
+            organization_id: organization.organization_id.clone(),
+            subject: "usr_member".to_owned(),
+        };
+        let removal = provider
+            .remove_member(
+                InvocationContext::new(8, None, CancellationToken::new())
+                    .with_caller_instance("membership-admin"),
+                remove_request.clone(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(removal.removed);
+        assert_eq!(removal.membership_id, first_add.membership_id);
+        assert_eq!(removal.revision, "2");
+
+        let replay = provider
+            .remove_member(
+                InvocationContext::new(9, None, CancellationToken::new())
+                    .with_caller_instance("membership-admin"),
+                remove_request,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!replay.removed);
+        assert_eq!(replay.membership_id, first_add.membership_id);
+        assert_eq!(replay.revision, "2");
+
+        let inactive = provider
+            .check_membership(
+                InvocationContext::new(10, None, CancellationToken::new()),
+                CheckMembershipRequest {
+                    organization_id: organization.organization_id.clone(),
+                    subject: "usr_member".to_owned(),
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!inactive.active);
+        assert!(!inactive.owner);
+
+        let prepared = provider.prepared().unwrap();
+        sqlx::query(
+            "UPDATE organizations SET archived_at=transaction_timestamp(),revision=2 WHERE organization_id=$1",
+        )
+        .bind(&organization.organization_id)
+        .execute(prepared.postgres.pool())
+        .await
+        .unwrap();
+        let archived_directory_entry = provider
+            .get_organization(
+                InvocationContext::new(11, None, CancellationToken::new())
+                    .with_caller_instance("directory-consumer"),
+                GetOrganizationRequest {
+                    organization_id: organization.organization_id.clone(),
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!archived_directory_entry.active);
+        assert_eq!(archived_directory_entry.revision, "2");
+
+        let archived_replay = provider
+            .add_member(
+                InvocationContext::new(12, None, CancellationToken::new())
+                    .with_caller_instance("membership-admin"),
+                add_request.clone(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!archived_replay.created);
+        assert_eq!(archived_replay.membership_id, first_add.membership_id);
+        assert_eq!(archived_replay.revision, "1");
+
+        let archived_new_command = provider
+            .add_member(
+                InvocationContext::new(13, None, CancellationToken::new())
+                    .with_caller_instance("membership-admin"),
+                AddMemberRequest {
+                    idempotency_key: "archived-new-command".to_owned(),
+                    organization_id: organization.organization_id.clone(),
+                    subject: "usr_after_archive".to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            archived_new_command,
+            Err(AddMemberError::OrganizationNotFound)
+        );
+
+        let operation_conflict = provider
+            .remove_member(
+                InvocationContext::new(14, None, CancellationToken::new())
+                    .with_caller_instance("membership-admin"),
+                RemoveMemberRequest {
+                    idempotency_key: add_request.idempotency_key,
+                    organization_id: organization.organization_id.clone(),
+                    subject: add_request.subject,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            operation_conflict,
+            Err(RemoveMemberError::IdempotencyConflict)
+        );
+
+        let missing_organization = provider
+            .add_member(
+                InvocationContext::new(15, None, CancellationToken::new())
+                    .with_caller_instance("membership-admin"),
+                AddMemberRequest {
+                    idempotency_key: "missing-organization".to_owned(),
+                    organization_id: "org_missing".to_owned(),
+                    subject: "usr_member".to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            missing_organization,
+            Err(AddMemberError::OrganizationNotFound)
+        );
+
+        prepared.postgres.pool().close().await;
         let cleanup_pool = sqlx::PgPool::connect(&database_url).await.unwrap();
         cleanup_pool
             .execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))

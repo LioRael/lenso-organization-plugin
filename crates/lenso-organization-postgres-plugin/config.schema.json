@@ -8,6 +8,16 @@
       "items": { "type": "string" }
     },
     "database_url_secret": { "type": "string" },
+    "directory_callers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "membership_admin_callers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
     "schema": { "type": "string" }
   },
   "additionalProperties": false

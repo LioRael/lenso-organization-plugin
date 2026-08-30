@@ -630,7 +630,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-capability-organization-directory"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-codegen",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lenso-capability-organization-membership"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-codegen",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-organization-membership-admin"
 version = "0.1.0"
 dependencies = [
  "futures",
@@ -734,12 +760,14 @@ dependencies = [
 
 [[package]]
 name = "lenso-organization-postgres-plugin"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "futures",
  "getrandom 0.4.3",
  "lenso-capability-organization-admin",
+ "lenso-capability-organization-directory",
  "lenso-capability-organization-membership",
+ "lenso-capability-organization-membership-admin",
  "lenso-capability-secrets",
  "lenso-kernel",
  "lenso-native-adapter",
