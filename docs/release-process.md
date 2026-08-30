@@ -9,6 +9,10 @@ artifacts. The composition-only Secrets fixture remains private. Publication
 is manual and must run from a clean `main` checkout through
 `.github/workflows/release-plz.yml`.
 
+Every push to `main` also asks release-plz to open or update the repository's
+release pull request. Merging that pull request does not publish by itself;
+publication still requires the explicitly confirmed live workflow dispatch.
+
 Before the first publication of a new crate name:
 
 1. prove generated contract freshness, workspace tests, PostgreSQL acceptance,
