@@ -1,9 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["allowed"],
+  "required": ["active", "owner"],
   "properties": {
-    "allowed": { "type": "boolean" }
+    "active": { "type": "boolean" },
+    "owner": { "type": "boolean" }
   },
   "additionalProperties": false
 }

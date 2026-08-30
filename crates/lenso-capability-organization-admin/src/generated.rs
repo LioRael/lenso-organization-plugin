@@ -4,7 +4,7 @@ use futures::future::LocalBoxFuture;
 use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture, NativeRequestHandle, PluginDependencies, RequestCapability, RuntimeFailure};
 
 use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany};
-pub const CAPABILITY_ID: &str = "lenso.organization-admin@1";
+pub const CAPABILITY_ID: &str = "lenso.organization-admin@2";
 pub const DESCRIPTOR_VERSION: &str = "1.0.0";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
@@ -13,15 +13,15 @@ pub const ORGANIZATION_ADMIN_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VERSION;
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_provided_organization_admin { () => { "{\"capability_id\":\"lenso.organization-admin@1\",\"descriptor_version\":\"1.0.0\",\"operations\":[\"create_organization\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
+macro_rules! __lenso_provided_organization_admin { () => { "{\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.0.0\",\"operations\":[\"create_organization\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_organization_admin_client { () => { "{\"capability_id\":\"lenso.organization-admin@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" }; }
+macro_rules! __lenso_required_organization_admin_client { () => { "{\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" }; }
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_many_organization_admin_client { () => { "{\"capability_id\":\"lenso.organization-admin@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" }; }
+macro_rules! __lenso_required_many_organization_admin_client { () => { "{\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" }; }
 
 pub const CREATE_ORGANIZATION_OPERATION: &str = "create_organization";
 
@@ -30,6 +30,9 @@ use lenso_contract_runtime::{decode_portable_json, encode_portable_json};
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CreateOrganizationRequest {
+    #[serde(rename = "idempotency_key")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub idempotency_key: String,
     #[serde(rename = "name")]
     #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
     pub name: String,
@@ -43,20 +46,21 @@ pub struct CreateOrganizationRequest {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CreateOrganizationResponse {
+    #[serde(rename = "created")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub created: bool,
     #[serde(rename = "organization_id")]
     #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
     pub organization_id: String,
     #[serde(rename = "owner_membership_id")]
     #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
     pub owner_membership_id: String,
-    #[serde(rename = "owner_role_id")]
-    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
-    pub owner_role_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum CreateOrganizationError {
     Forbidden,
+    IdempotencyConflict,
     InvalidOrganization,
     SlugConflict,
     Unknown(UnknownDomainError),
@@ -93,6 +97,7 @@ impl serde::Serialize for CreateOrganizationError {
         use serde::ser::SerializeMap;
         match self {
             Self::Forbidden => serializer.serialize_str("forbidden"),
+            Self::IdempotencyConflict => serializer.serialize_str("idempotency_conflict"),
             Self::InvalidOrganization => serializer.serialize_str("invalid_organization"),
             Self::SlugConflict => serializer.serialize_str("slug_conflict"),
             Self::Unknown(value) => {
@@ -119,6 +124,7 @@ impl<'de> serde::Deserialize<'de> for CreateOrganizationError {
         match value {
             serde_json::Value::String(code) => match code.as_str() {
                 "forbidden" => Ok(Self::Forbidden),
+                "idempotency_conflict" => Ok(Self::IdempotencyConflict),
                 "invalid_organization" => Ok(Self::InvalidOrganization),
                 "slug_conflict" => Ok(Self::SlugConflict),
                 _ => Ok(Self::Unknown(UnknownDomainError { code, payload: None, extra: std::collections::BTreeMap::new() })),

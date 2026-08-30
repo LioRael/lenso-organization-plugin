@@ -11,5 +11,5 @@ fn main() {
         ProjectionLanguage::Rust,
         Path::new("src/generated.rs"),
     )
-    .unwrap_or_else(|error| panic!("Organization Access projection is stale: {error}"));
+    .unwrap_or_else(|error| panic!("Organization Membership projection is stale: {error}"));
 }

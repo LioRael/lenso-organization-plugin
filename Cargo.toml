@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/lenso-capability-organization-access",
     "crates/lenso-capability-organization-admin",
+    "crates/lenso-capability-organization-membership",
     "crates/lenso-organization-secrets-fixture",
     "crates/lenso-organization-postgres-plugin",
 ]
