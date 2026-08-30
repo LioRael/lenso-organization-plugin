@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["membership_id", "removed", "revision"],
+  "properties": {
+    "membership_id": {"type": "string"},
+    "removed": {"type": "boolean"},
+    "revision": {"type": "string", "pattern": "^[1-9][0-9]*$"}
+  },
+  "additionalProperties": false
+}

@@ -16,6 +16,11 @@ const MIGRATIONS: &[Migration] = sql_migrations![
         "add-creation-idempotency",
         "migrations/003-add-creation-idempotency.sql",
     ),
+    (
+        4,
+        "add-membership-administration",
+        "migrations/004-add-membership-administration.sql",
+    ),
 ];
 
 pub(crate) fn schema_plan(schema: impl Into<std::sync::Arc<str>>) -> Result<SchemaPlan, PlanError> {
@@ -52,6 +57,21 @@ mod tests {
         assert!(migration.contains("PRIMARY KEY (caller_instance, idempotency_key)"));
         assert!(migration.contains("REFERENCES organizations(organization_id)"));
         assert!(migration.contains("REFERENCES organization_memberships(membership_id)"));
+        assert!(migration.contains("DEFERRABLE INITIALLY DEFERRED"));
+    }
+
+    #[test]
+    fn membership_commands_are_caller_scoped_and_reference_owned_memberships() {
+        let migration = MIGRATIONS[3].sql();
+
+        assert!(migration.contains("PRIMARY KEY (caller_instance, idempotency_key)"));
+        assert!(
+            migration
+                .contains("REFERENCES organization_memberships(organization_id, membership_id)")
+        );
+        assert!(migration.contains("operation IN ('add_member', 'remove_member')"));
+        assert!(migration.contains("ADD COLUMN revision bigint NOT NULL DEFAULT 1"));
+        assert!(migration.contains("ALTER TABLE organizations"));
         assert!(migration.contains("DEFERRABLE INITIALLY DEFERRED"));
     }
 }

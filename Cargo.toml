@@ -2,7 +2,9 @@
 resolver = "2"
 members = [
     "crates/lenso-capability-organization-admin",
+    "crates/lenso-capability-organization-directory",
     "crates/lenso-capability-organization-membership",
+    "crates/lenso-capability-organization-membership-admin",
     "crates/lenso-organization-secrets-fixture",
     "crates/lenso-organization-postgres-plugin",
 ]

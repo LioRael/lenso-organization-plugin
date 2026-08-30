@@ -4,7 +4,7 @@ The former `lenso-module-organization` line ended at its existing public crate
 versions and tags. The default branch now owns vNext packages with different
 identities; it must not republish or overwrite the legacy package.
 
-The two Capability packages and the PostgreSQL Plugin are public release
+The four Capability packages and the PostgreSQL Plugin are public release
 artifacts. The composition-only Secrets fixture remains private. Publication
 is manual and must run from a clean `main` checkout through
 `.github/workflows/release-plz.yml`.
@@ -17,7 +17,7 @@ Before the first publication of a new crate name:
 
 1. prove generated contract freshness, workspace tests, PostgreSQL acceptance,
    repository boundary, and independent package verification;
-2. make the two Capability packages public before the implementation package;
+2. make the four Capability packages public before the implementation package;
 3. allocate the name using crates.io's required one-time initial-publish
    process; Trusted Publishing cannot create a new crate name;
 4. configure a crates.io Trusted Publisher for every published crate with
@@ -36,8 +36,10 @@ Run a validation-only workflow first. A live run requires `live=true`,
 `confirm=publish`, and the `main` ref. Publish order is:
 
 1. `lenso-capability-organization-admin`;
-2. `lenso-capability-organization-membership`; and
-3. `lenso-organization-postgres-plugin`.
+2. `lenso-capability-organization-directory`;
+3. `lenso-capability-organization-membership`;
+4. `lenso-capability-organization-membership-admin`; and
+5. `lenso-organization-postgres-plugin`.
 
 ## Local gates
 
