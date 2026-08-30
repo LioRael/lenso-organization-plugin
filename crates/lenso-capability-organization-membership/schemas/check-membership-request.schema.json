@@ -1,10 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["organization_id", "permission", "subject"],
+  "required": ["organization_id", "subject"],
   "properties": {
     "organization_id": { "type": "string" },
-    "permission": { "type": "string" },
     "subject": { "type": "string" }
   },
   "additionalProperties": false

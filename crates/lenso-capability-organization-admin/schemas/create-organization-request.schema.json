@@ -1,8 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["name", "owner_subject", "slug"],
+  "required": ["idempotency_key", "name", "owner_subject", "slug"],
   "properties": {
+    "idempotency_key": { "type": "string" },
     "name": { "type": "string" },
     "owner_subject": { "type": "string" },
     "slug": { "type": "string" }

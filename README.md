@@ -1,26 +1,35 @@
 # Lenso Organization Plugin
 
-First-party Organization roles and PostgreSQL behavior for Lenso vNext. The
+First-party Organization membership and PostgreSQL behavior for Lenso vNext. The
 default branch is vNext-only; the former `lenso-module-organization` releases
 remain available through their existing crate versions and Git tags.
 
 ## Workspace
 
 - `lenso-capability-organization-admin` owns the generated
-  `lenso.organization-admin@1` administrative role.
-- `lenso-capability-organization-access` owns the generated
-  `lenso.organization-access@1` permission-query role.
-- `lenso-organization-postgres-plugin` atomically owns Organizations, roles,
-  memberships, active slug uniqueness, and explicit schema administration.
+  `lenso.organization-admin@2` administrative role.
+- `lenso-capability-organization-membership` owns the generated
+  `lenso.organization-membership@1` membership-query role.
+- `lenso-organization-postgres-plugin` atomically owns Organizations,
+  memberships, first-class ownership, caller-scoped creation receipts, active
+  slug uniqueness, and explicit schema administration.
 
 The Plugin requires one explicitly bound `lenso.secrets@1` provider during
 `prepare`. Composition supplies only the database URL reference, owned schema,
 and exact caller Instance keys allowed to create Organizations. App boot checks
 an existing compatible schema and never applies migrations.
 
-The Access Capability answers whether a subject has one Organization
-permission. Calling target Plugins retain final authorization and must not read
-Organization tables directly.
+The Membership Capability answers whether a subject is an active member or
+owner of one Organization. Roles, permission grants, bindings, and RBAC
+decisions belong to the independent Access Control Plugin. Calling target
+Plugins combine current membership, Access Control, and resource-local rules
+for final authorization and must not read Organization tables directly.
+
+`create_organization` requires an idempotency key scoped to the exact admitted
+caller Instance. A replay with the same normalized intent returns the original
+Organization and owner-membership IDs with `created = false`; reusing that key
+for a different intent returns `idempotency_conflict`. Active-slug conflicts
+remain a separate Domain Error and are never inferred to be successful replays.
 
 ## Operator setup
 

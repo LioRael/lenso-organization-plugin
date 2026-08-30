@@ -4,81 +4,81 @@ use futures::future::LocalBoxFuture;
 use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture, NativeRequestHandle, PluginDependencies, RequestCapability, RuntimeFailure};
 
 use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany};
-pub const CAPABILITY_ID: &str = "lenso.organization-access@1";
+pub const CAPABILITY_ID: &str = "lenso.organization-membership@1";
 pub const DESCRIPTOR_VERSION: &str = "1.0.0";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
-pub const ORGANIZATION_ACCESS_CAPABILITY_ID: &str = CAPABILITY_ID;
-pub const ORGANIZATION_ACCESS_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VERSION;
+pub const ORGANIZATION_MEMBERSHIP_CAPABILITY_ID: &str = CAPABILITY_ID;
+pub const ORGANIZATION_MEMBERSHIP_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VERSION;
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_provided_organization_access { () => { "{\"capability_id\":\"lenso.organization-access@1\",\"descriptor_version\":\"1.0.0\",\"operations\":[\"check_permission\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
+macro_rules! __lenso_provided_organization_membership { () => { "{\"capability_id\":\"lenso.organization-membership@1\",\"descriptor_version\":\"1.0.0\",\"operations\":[\"check_membership\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_organization_access_client { () => { "{\"capability_id\":\"lenso.organization-access@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" }; }
+macro_rules! __lenso_required_organization_membership_client { () => { "{\"capability_id\":\"lenso.organization-membership@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" }; }
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_many_organization_access_client { () => { "{\"capability_id\":\"lenso.organization-access@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" }; }
+macro_rules! __lenso_required_many_organization_membership_client { () => { "{\"capability_id\":\"lenso.organization-membership@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" }; }
 
-pub const CHECK_PERMISSION_OPERATION: &str = "check_permission";
+pub const CHECK_MEMBERSHIP_OPERATION: &str = "check_membership";
 
 pub use lenso_contract_runtime::{UnknownDomainError};
 use lenso_contract_runtime::{decode_portable_json, encode_portable_json};
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct CheckPermissionRequest {
+pub struct CheckMembershipRequest {
     #[serde(rename = "organization_id")]
     #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
     pub organization_id: String,
-    #[serde(rename = "permission")]
-    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
-    pub permission: String,
     #[serde(rename = "subject")]
     #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
     pub subject: String,
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct CheckPermissionResponse {
-    #[serde(rename = "allowed")]
+pub struct CheckMembershipResponse {
+    #[serde(rename = "active")]
     #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
-    pub allowed: bool,
+    pub active: bool,
+    #[serde(rename = "owner")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub owner: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum CheckPermissionError {
+pub enum CheckMembershipError {
     InvalidRequest,
     OrganizationNotFound,
     Unknown(UnknownDomainError),
 }
 
 #[derive(Debug)]
-pub struct OrganizationAccess;
-impl RequestCapability for OrganizationAccess {
-    type Request = CheckPermissionRequest;
-    type Response = CheckPermissionResponse;
-    type DomainError = CheckPermissionError;
+pub struct OrganizationMembership;
+impl RequestCapability for OrganizationMembership {
+    type Request = CheckMembershipRequest;
+    type Response = CheckMembershipResponse;
+    type DomainError = CheckMembershipError;
     const ID: &'static str = CAPABILITY_ID;
     const DESCRIPTOR_VERSION: &'static str = DESCRIPTOR_VERSION;
 
     fn invoke_native(endpoint: &dyn NativeRequestEndpoint, operation: &str, request: Self::Request, context: InvocationContext) -> NativeRequestFuture<Self> {
-        if operation != CHECK_PERMISSION_OPERATION {
+        if operation != CHECK_MEMBERSHIP_OPERATION {
             return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
         }
         let Some(typed_endpoint) = endpoint
             .typed_endpoint()
-            .and_then(|endpoint| endpoint.downcast_ref::<OrganizationAccessRequestEndpoint>())
+            .and_then(|endpoint| endpoint.downcast_ref::<OrganizationMembershipRequestEndpoint>())
         else {
             return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
         };
-        Rc::clone(&typed_endpoint.provider).check_permission(context, request)
+        Rc::clone(&typed_endpoint.provider).check_membership(context, request)
     }
 }
 
-impl serde::Serialize for CheckPermissionError {
+impl serde::Serialize for CheckMembershipError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -102,7 +102,7 @@ impl serde::Serialize for CheckPermissionError {
     }
 }
 
-impl<'de> serde::Deserialize<'de> for CheckPermissionError {
+impl<'de> serde::Deserialize<'de> for CheckMembershipError {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -127,25 +127,25 @@ impl<'de> serde::Deserialize<'de> for CheckPermissionError {
     }
 }
 
-pub fn encode_check_permission_request(value: &CheckPermissionRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
-pub fn decode_check_permission_request(wire: &str) -> Result<CheckPermissionRequest, serde_json::Error> { decode_portable_json(wire) }
-pub fn encode_check_permission_response(value: &CheckPermissionResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
-pub fn decode_check_permission_response(wire: &str) -> Result<CheckPermissionResponse, serde_json::Error> { decode_portable_json(wire) }
-pub fn encode_check_permission_error(value: &CheckPermissionError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
-pub fn decode_check_permission_error(wire: &str) -> Result<CheckPermissionError, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_check_membership_request(value: &CheckMembershipRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_check_membership_request(wire: &str) -> Result<CheckMembershipRequest, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_check_membership_response(value: &CheckMembershipResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_check_membership_response(wire: &str) -> Result<CheckMembershipResponse, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_check_membership_error(value: &CheckMembershipError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_check_membership_error(wire: &str) -> Result<CheckMembershipError, serde_json::Error> { decode_portable_json(wire) }
 
 #[doc(hidden)]
-pub trait __LensoIntoOrganizationAccessCheckPermissionResult {
-    fn __lenso_into_result(self) -> Result<Result<CheckPermissionResponse, CheckPermissionError>, RuntimeFailure>;
+pub trait __LensoIntoOrganizationMembershipCheckMembershipResult {
+    fn __lenso_into_result(self) -> Result<Result<CheckMembershipResponse, CheckMembershipError>, RuntimeFailure>;
 }
-impl __LensoIntoOrganizationAccessCheckPermissionResult for Result<CheckPermissionResponse, CheckPermissionError> {
-    fn __lenso_into_result(self) -> Result<Result<CheckPermissionResponse, CheckPermissionError>, RuntimeFailure> { Ok(self) }
+impl __LensoIntoOrganizationMembershipCheckMembershipResult for Result<CheckMembershipResponse, CheckMembershipError> {
+    fn __lenso_into_result(self) -> Result<Result<CheckMembershipResponse, CheckMembershipError>, RuntimeFailure> { Ok(self) }
 }
-impl __LensoIntoOrganizationAccessCheckPermissionResult for Result<Result<CheckPermissionResponse, CheckPermissionError>, RuntimeFailure> {
-    fn __lenso_into_result(self) -> Result<Result<CheckPermissionResponse, CheckPermissionError>, RuntimeFailure> { self }
+impl __LensoIntoOrganizationMembershipCheckMembershipResult for Result<Result<CheckMembershipResponse, CheckMembershipError>, RuntimeFailure> {
+    fn __lenso_into_result(self) -> Result<Result<CheckMembershipResponse, CheckMembershipError>, RuntimeFailure> { self }
 }
-impl __LensoIntoOrganizationAccessCheckPermissionResult for Result<CheckPermissionResponse, lenso_plugin_authoring::PluginError<CheckPermissionError, RuntimeFailure>> {
-    fn __lenso_into_result(self) -> Result<Result<CheckPermissionResponse, CheckPermissionError>, RuntimeFailure> {
+impl __LensoIntoOrganizationMembershipCheckMembershipResult for Result<CheckMembershipResponse, lenso_plugin_authoring::PluginError<CheckMembershipError, RuntimeFailure>> {
+    fn __lenso_into_result(self) -> Result<Result<CheckMembershipResponse, CheckMembershipError>, RuntimeFailure> {
         match self {
             Ok(value) => Ok(Ok(value)),
             Err(lenso_plugin_authoring::PluginError::Domain(error)) => Ok(Err(error)),
@@ -153,31 +153,31 @@ impl __LensoIntoOrganizationAccessCheckPermissionResult for Result<CheckPermissi
         }
     }
 }
-impl __LensoIntoOrganizationAccessCheckPermissionResult for Result<CheckPermissionResponse, OrganizationAccessInvocationError> {
-    fn __lenso_into_result(self) -> Result<Result<CheckPermissionResponse, CheckPermissionError>, RuntimeFailure> {
+impl __LensoIntoOrganizationMembershipCheckMembershipResult for Result<CheckMembershipResponse, OrganizationMembershipInvocationError> {
+    fn __lenso_into_result(self) -> Result<Result<CheckMembershipResponse, CheckMembershipError>, RuntimeFailure> {
         match self {
             Ok(value) => Ok(Ok(value)),
-            Err(OrganizationAccessInvocationError::Domain(error)) => Ok(Err(error)),
-            Err(OrganizationAccessInvocationError::Runtime(error)) => Err(error),
+            Err(OrganizationMembershipInvocationError::Domain(error)) => Ok(Err(error)),
+            Err(OrganizationMembershipInvocationError::Runtime(error)) => Err(error),
         }
     }
 }
 
-pub trait OrganizationAccessProvider: fmt::Debug + 'static {
-    fn check_permission(&self, context: InvocationContext, request: CheckPermissionRequest) -> NativeRequestFuture<OrganizationAccess>;
+pub trait OrganizationMembershipProvider: fmt::Debug + 'static {
+    fn check_membership(&self, context: InvocationContext, request: CheckMembershipRequest) -> NativeRequestFuture<OrganizationMembership>;
 }
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_native_lower_organization_access {
+macro_rules! __lenso_native_lower_organization_membership {
     ($plugin:ty, $support:path) => {
-        use $support as __LensoNativeSupportOrganizationAccess;
-        impl $crate::OrganizationAccessProvider for $plugin {
-        fn check_permission(&self, context: __LensoNativeSupportOrganizationAccess::InvocationContext, request: $crate::CheckPermissionRequest) -> __LensoNativeSupportOrganizationAccess::NativeRequestFuture<$crate::OrganizationAccess> {
+        use $support as __LensoNativeSupportOrganizationMembership;
+        impl $crate::OrganizationMembershipProvider for $plugin {
+        fn check_membership(&self, context: __LensoNativeSupportOrganizationMembership::InvocationContext, request: $crate::CheckMembershipRequest) -> __LensoNativeSupportOrganizationMembership::NativeRequestFuture<$crate::OrganizationMembership> {
             let plugin = self.clone();
             ::std::boxed::Box::pin(async move {
-                let result = <$plugin>::check_permission(&plugin, context, request).await;
-                $crate::__LensoIntoOrganizationAccessCheckPermissionResult::__lenso_into_result(result)
+                let result = <$plugin>::check_membership(&plugin, context, request).await;
+                $crate::__LensoIntoOrganizationMembershipCheckMembershipResult::__lenso_into_result(result)
             })
         }
         }
@@ -185,32 +185,32 @@ macro_rules! __lenso_native_lower_organization_access {
 }
 
 #[derive(Debug)]
-struct OrganizationAccessRequestEndpoint { provider: Rc<dyn OrganizationAccessProvider> }
+struct OrganizationMembershipRequestEndpoint { provider: Rc<dyn OrganizationMembershipProvider> }
 
 #[derive(Debug)]
-pub struct OrganizationAccessEndpoint<P: OrganizationAccessProvider> { provider: Rc<P>, request_endpoint: OrganizationAccessRequestEndpoint }
-impl<P: OrganizationAccessProvider> OrganizationAccessEndpoint<P> {
+pub struct OrganizationMembershipEndpoint<P: OrganizationMembershipProvider> { provider: Rc<P>, request_endpoint: OrganizationMembershipRequestEndpoint }
+impl<P: OrganizationMembershipProvider> OrganizationMembershipEndpoint<P> {
     pub fn new(provider: P) -> Self {
         let provider = Rc::new(provider);
-        let request_provider: Rc<dyn OrganizationAccessProvider> = provider.clone();
-        Self { provider, request_endpoint: OrganizationAccessRequestEndpoint { provider: request_provider } }
+        let request_provider: Rc<dyn OrganizationMembershipProvider> = provider.clone();
+        Self { provider, request_endpoint: OrganizationMembershipRequestEndpoint { provider: request_provider } }
     }
 }
 
-impl<P: OrganizationAccessProvider> NativeRequestEndpoint for OrganizationAccessEndpoint<P> {
+impl<P: OrganizationMembershipProvider> NativeRequestEndpoint for OrganizationMembershipEndpoint<P> {
     fn capability_id(&self) -> &'static str { CAPABILITY_ID }
     fn descriptor_version(&self) -> &'static str { DESCRIPTOR_VERSION }
     fn operations(&self) -> &'static [&'static str] { &[
-        CHECK_PERMISSION_OPERATION,
+        CHECK_MEMBERSHIP_OPERATION,
     ] }
     fn typed_endpoint(&self) -> Option<&dyn std::any::Any> { Some(&self.request_endpoint) }
     fn invoke(&self, operation: &str, request: Box<dyn std::any::Any>, context: InvocationContext) -> LocalBoxFuture<'static, Result<Result<Box<dyn std::any::Any>, Box<dyn std::any::Any>>, RuntimeFailure>> {
         match operation {
-            CHECK_PERMISSION_OPERATION => {
-                let Ok(request) = request.downcast::<CheckPermissionRequest>() else {
+            CHECK_MEMBERSHIP_OPERATION => {
+                let Ok(request) = request.downcast::<CheckMembershipRequest>() else {
                     return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
                 };
-                let invocation = Rc::clone(&self.provider).check_permission(context, *request);
+                let invocation = Rc::clone(&self.provider).check_membership(context, *request);
                 Box::pin(async move {
                     invocation.await.map(|result| {
                         result
@@ -226,10 +226,10 @@ impl<P: OrganizationAccessProvider> NativeRequestEndpoint for OrganizationAccess
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_native_endpoints_organization_access {
+macro_rules! __lenso_native_endpoints_organization_membership {
     ($provider:expr, $support:path) => {{
         use $support as __LensoNativeSupport;
-        let endpoint = ::std::rc::Rc::new($crate::OrganizationAccessEndpoint::new($provider));
+        let endpoint = ::std::rc::Rc::new($crate::OrganizationMembershipEndpoint::new($provider));
         (
             vec![endpoint.clone() as ::std::rc::Rc<dyn __LensoNativeSupport::NativeRequestEndpoint>],
             vec![],
@@ -240,11 +240,11 @@ macro_rules! __lenso_native_endpoints_organization_access {
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_native_provide_organization_access {
+macro_rules! __lenso_native_provide_organization_membership {
     ($provider:expr, $lifecycle:expr, $support:path) => {{
         use $support as __LensoNativeSupport;
         let (request_endpoints, stream_endpoints, event_endpoints) =
-            $crate::__lenso_native_endpoints_organization_access!($provider, $support);
+            $crate::__lenso_native_endpoints_organization_membership!($provider, $support);
         __LensoNativeSupport::NativePluginInstance::with_all_endpoints(
             request_endpoints,
             stream_endpoints,
@@ -255,32 +255,32 @@ macro_rules! __lenso_native_provide_organization_access {
 }
 
 #[derive(Debug)]
-pub struct OrganizationAccessClient {
-    check_permission: NativeRequestHandle<OrganizationAccess>,
+pub struct OrganizationMembershipClient {
+    check_membership: NativeRequestHandle<OrganizationMembership>,
 }
-impl OrganizationAccessClient {
-    pub fn new(handle: NativeRequestHandle<OrganizationAccess>) -> Self {
-        Self { check_permission: handle }
+impl OrganizationMembershipClient {
+    pub fn new(handle: NativeRequestHandle<OrganizationMembership>) -> Self {
+        Self { check_membership: handle }
     }
 
     pub fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         <Self as CapabilityClient>::from_dependencies(dependencies)
     }
 
-    pub async fn check_permission(&self, request: CheckPermissionRequest) -> Result<CheckPermissionResponse, OrganizationAccessInvocationError> {
-        self.check_permission.invoke(CHECK_PERMISSION_OPERATION, request).await
-            .map_err(OrganizationAccessInvocationError::Runtime)?
-            .map_err(OrganizationAccessInvocationError::Domain)
+    pub async fn check_membership(&self, request: CheckMembershipRequest) -> Result<CheckMembershipResponse, OrganizationMembershipInvocationError> {
+        self.check_membership.invoke(CHECK_MEMBERSHIP_OPERATION, request).await
+            .map_err(OrganizationMembershipInvocationError::Runtime)?
+            .map_err(OrganizationMembershipInvocationError::Domain)
     }
 
-    pub async fn check_permission_with_context(&self, context: InvocationContext, request: CheckPermissionRequest) -> Result<CheckPermissionResponse, OrganizationAccessInvocationError> {
-        self.check_permission.invoke_with_context(CHECK_PERMISSION_OPERATION, context, request).await
-            .map_err(OrganizationAccessInvocationError::Runtime)?
-            .map_err(OrganizationAccessInvocationError::Domain)
+    pub async fn check_membership_with_context(&self, context: InvocationContext, request: CheckMembershipRequest) -> Result<CheckMembershipResponse, OrganizationMembershipInvocationError> {
+        self.check_membership.invoke_with_context(CHECK_MEMBERSHIP_OPERATION, context, request).await
+            .map_err(OrganizationMembershipInvocationError::Runtime)?
+            .map_err(OrganizationMembershipInvocationError::Domain)
     }
 }
 
-impl CapabilityClient for OrganizationAccessClient {
+impl CapabilityClient for OrganizationMembershipClient {
     type Dependencies = PluginDependencies;
     type Error = RuntimeFailure;
 
@@ -289,7 +289,7 @@ impl CapabilityClient for OrganizationAccessClient {
 
     fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         Ok(Self {
-            check_permission: dependencies.one::<OrganizationAccess>()?,
+            check_membership: dependencies.one::<OrganizationMembership>()?,
         })
     }
 
@@ -300,7 +300,7 @@ impl CapabilityClient for OrganizationAccessClient {
     }
 }
 
-impl CapabilityClientMany for OrganizationAccessClient {
+impl CapabilityClientMany for OrganizationMembershipClient {
     fn many_from_dependencies(
         dependencies: &PluginDependencies,
     ) -> Result<Vec<BoundCapabilityClient<Self>>, RuntimeFailure> {
@@ -312,7 +312,7 @@ impl CapabilityClientMany for OrganizationAccessClient {
                 Ok(BoundCapabilityClient::new(
                     binding.provider_instance(),
                     Self {
-                    check_permission: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OrganizationAccess>()?,
+                    check_membership: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OrganizationMembership>()?,
                     },
                 ))
             })
@@ -321,7 +321,7 @@ impl CapabilityClientMany for OrganizationAccessClient {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum OrganizationAccessInvocationError {
-    Domain(CheckPermissionError),
+pub enum OrganizationMembershipInvocationError {
+    Domain(CheckMembershipError),
     Runtime(RuntimeFailure),
 }

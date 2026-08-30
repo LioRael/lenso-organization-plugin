@@ -4,21 +4,36 @@ The former `lenso-module-organization` line ended at its existing public crate
 versions and tags. The default branch now owns vNext packages with different
 identities; it must not republish or overwrite the legacy package.
 
-All vNext packages remain `publish = false` while the first vertical slice is
-under acceptance. The release workflow is therefore manual and dry-run-only.
-Before enabling publication:
+The two Capability packages and the PostgreSQL Plugin are public release
+artifacts. The composition-only Secrets fixture remains private. Publication
+is manual and must run from a clean `main` checkout through
+`.github/workflows/release-plz.yml`.
+
+Before the first publication of a new crate name:
 
 1. prove generated contract freshness, workspace tests, PostgreSQL acceptance,
    repository boundary, and independent package verification;
 2. make the two Capability packages public before the implementation package;
-3. allocate each new crates.io name from a reviewed clean `main` checkout with
-   a temporary restricted token, then revoke it;
-4. configure crates.io Trusted Publishers for this repository and
-   `.github/workflows/release-plz.yml`; and
-5. replace the parked workflow only in a separately reviewed release change.
+3. allocate the name using crates.io's required one-time initial-publish
+   process; Trusted Publishing cannot create a new crate name;
+4. configure a crates.io Trusted Publisher for every published crate with
+   owner `LioRael`, repository `lenso-organization-plugin`, and workflow
+   `release-plz.yml`; and
+5. run the live workflow only after every crate has the matching publisher.
+
+The workflow never accepts or falls back to a long-lived registry token.
+Release-plz obtains a short-lived crates.io credential from GitHub OIDC, and
+the live job has only the `id-token: write` permission needed for that exchange.
 
 Do not use `--no-verify`, a long-lived registry token, or Git dependencies as a
 publication shortcut.
+
+Run a validation-only workflow first. A live run requires `live=true`,
+`confirm=publish`, and the `main` ref. Publish order is:
+
+1. `lenso-capability-organization-admin`;
+2. `lenso-capability-organization-membership`; and
+3. `lenso-organization-postgres-plugin`.
 
 ## Local gates
 
