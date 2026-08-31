@@ -618,7 +618,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-organization-admin"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "futures",
  "lenso-contract-codegen",
@@ -631,7 +631,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-organization-directory"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "lenso-contract-codegen",
@@ -644,7 +644,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-organization-membership"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "lenso-contract-codegen",
@@ -657,7 +657,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-organization-membership-admin"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "lenso-contract-codegen",
@@ -761,7 +761,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-organization-postgres-plugin"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "futures",
  "getrandom 0.4.3",
