@@ -1,6 +1,6 @@
 [package]
 name = "lenso-organization-postgres-plugin"
-version = "0.3.0"
+version = "0.3.1"
 edition.workspace = true
 license.workspace = true
 publish = true
@@ -10,10 +10,10 @@ description = "PostgreSQL-backed Organization Plugin for Lenso vNext."
 [dependencies]
 futures.workspace = true
 getrandom.workspace = true
-lenso-capability-organization-admin = { path = "../lenso-capability-organization-admin", version = "0.2.0" }
-lenso-capability-organization-directory = { path = "../lenso-capability-organization-directory", version = "0.1.0" }
-lenso-capability-organization-membership = { path = "../lenso-capability-organization-membership", version = "0.1.0" }
-lenso-capability-organization-membership-admin = { path = "../lenso-capability-organization-membership-admin", version = "0.1.0" }
+lenso-capability-organization-admin = { path = "../lenso-capability-organization-admin", version = "0.2.1" }
+lenso-capability-organization-directory = { path = "../lenso-capability-organization-directory", version = "0.1.1" }
+lenso-capability-organization-membership = { path = "../lenso-capability-organization-membership", version = "0.1.1" }
+lenso-capability-organization-membership-admin = { path = "../lenso-capability-organization-membership-admin", version = "0.1.1" }
 lenso-capability-secrets.workspace = true
 lenso-kernel.workspace = true
 lenso-native-adapter.workspace = true
