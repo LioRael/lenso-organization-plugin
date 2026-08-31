@@ -47,7 +47,6 @@ Run a validation-only workflow first. A live run requires `live=true`,
 cargo fmt --all -- --check
 cargo check --locked --workspace --all-targets
 cargo test --locked --workspace
-./scripts/check-repository-boundary.sh
 ```
 
 Run PostgreSQL acceptance with `LENSO_POSTGRES_TEST_URL` and
