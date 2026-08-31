@@ -67,7 +67,6 @@ OrganizationOperator::setup(database_url, "organization").await?;
 cargo fmt --all -- --check
 cargo check --locked --workspace --all-targets
 cargo test --locked --workspace
-./scripts/check-repository-boundary.sh
 ```
 
 PostgreSQL acceptance additionally runs:
