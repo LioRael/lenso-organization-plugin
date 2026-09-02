@@ -28,6 +28,10 @@ jobs:
           toolchain: 1.94.0
           components: rustfmt,clippy
       - run: cargo fmt --all -- --check
+      - name: Check generated contracts
+        run: |
+          cargo install --locked --version '=0.6.5' lenso-contract-codegen
+          lenso-contract-codegen workspace check --manifest-path Cargo.toml
       - run: cargo check --locked --workspace --all-targets
       - run: cargo test --locked --workspace
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
