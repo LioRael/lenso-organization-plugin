@@ -5,7 +5,7 @@ use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture
 
 use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany};
 pub const CAPABILITY_ID: &str = "lenso.organization-admin@2";
-pub const DESCRIPTOR_VERSION: &str = "1.0.0";
+pub const DESCRIPTOR_VERSION: &str = "1.1.0";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const ORGANIZATION_ADMIN_CAPABILITY_ID: &str = CAPABILITY_ID;
@@ -13,17 +13,18 @@ pub const ORGANIZATION_ADMIN_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VERSION;
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_provided_organization_admin { () => { "{\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.0.0\",\"operations\":[\"create_organization\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
+macro_rules! __lenso_provided_organization_admin { () => { "{\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.1.0\",\"operations\":[\"create_organization\",\"list_organizations\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_organization_admin_client { () => { "{\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" }; }
+macro_rules! __lenso_required_organization_admin_client { () => { "{\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" }; }
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_many_organization_admin_client { () => { "{\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" }; }
+macro_rules! __lenso_required_many_organization_admin_client { () => { "{\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" }; }
 
 pub const CREATE_ORGANIZATION_OPERATION: &str = "create_organization";
+pub const LIST_ORGANIZATIONS_OPERATION: &str = "list_organizations";
 
 pub use lenso_contract_runtime::{UnknownDomainError};
 use lenso_contract_runtime::{decode_portable_json, encode_portable_json};
@@ -66,9 +67,72 @@ pub enum CreateOrganizationError {
     Unknown(UnknownDomainError),
 }
 
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ListOrganizationsRequest {
+    #[serde(rename = "cursor")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub cursor: Option<String>,
+    #[serde(rename = "limit")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub limit: i64,
+    #[serde(rename = "slug")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub slug: Option<String>,
+    #[serde(rename = "status")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub status: ListOrganizationsRequestStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum ListOrganizationsRequestStatus {
+    #[serde(rename = "active")]
+    Active,
+    #[serde(rename = "archived")]
+    Archived,
+    #[serde(rename = "all")]
+    All,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ListOrganizationsResponse {
+    #[serde(rename = "next_cursor")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub next_cursor: Option<String>,
+    #[serde(rename = "organizations")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub organizations: Vec<Organization>,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Organization {
+    #[serde(rename = "active")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub active: bool,
+    #[serde(rename = "name")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub name: String,
+    #[serde(rename = "organization_id")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub organization_id: String,
+    #[serde(rename = "revision")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub revision: String,
+    #[serde(rename = "slug")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub slug: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ListOrganizationsError {
+    Forbidden,
+    InvalidPage,
+    InvalidRequest,
+    Unknown(UnknownDomainError),
+}
+
 #[derive(Debug)]
-pub struct OrganizationAdmin;
-impl RequestCapability for OrganizationAdmin {
+pub struct OrganizationAdminCreateOrganization;
+impl RequestCapability for OrganizationAdminCreateOrganization {
     type Request = CreateOrganizationRequest;
     type Response = CreateOrganizationResponse;
     type DomainError = CreateOrganizationError;
@@ -86,6 +150,29 @@ impl RequestCapability for OrganizationAdmin {
             return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
         };
         Rc::clone(&typed_endpoint.provider).create_organization(context, request)
+    }
+}
+
+#[derive(Debug)]
+pub struct OrganizationAdminListOrganizations;
+impl RequestCapability for OrganizationAdminListOrganizations {
+    type Request = ListOrganizationsRequest;
+    type Response = ListOrganizationsResponse;
+    type DomainError = ListOrganizationsError;
+    const ID: &'static str = CAPABILITY_ID;
+    const DESCRIPTOR_VERSION: &'static str = DESCRIPTOR_VERSION;
+
+    fn invoke_native(endpoint: &dyn NativeRequestEndpoint, operation: &str, request: Self::Request, context: InvocationContext) -> NativeRequestFuture<Self> {
+        if operation != LIST_ORGANIZATIONS_OPERATION {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        }
+        let Some(typed_endpoint) = endpoint
+            .typed_endpoint()
+            .and_then(|endpoint| endpoint.downcast_ref::<OrganizationAdminRequestEndpoint>())
+        else {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        };
+        Rc::clone(&typed_endpoint.provider).list_organizations(context, request)
     }
 }
 
@@ -142,12 +229,70 @@ impl<'de> serde::Deserialize<'de> for CreateOrganizationError {
     }
 }
 
+impl serde::Serialize for ListOrganizationsError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        match self {
+            Self::Forbidden => serializer.serialize_str("forbidden"),
+            Self::InvalidPage => serializer.serialize_str("invalid_page"),
+            Self::InvalidRequest => serializer.serialize_str("invalid_request"),
+            Self::Unknown(value) => {
+                let mut map = serializer.serialize_map(Some(1 + usize::from(value.payload.is_some()) + value.extra.len()))?;
+                map.serialize_entry("code", &value.code)?;
+                if let Some(payload) = &value.payload {
+                    map.serialize_entry("payload", payload)?;
+                }
+                for (key, extra) in &value.extra {
+                    map.serialize_entry(key, extra)?;
+                }
+                map.end()
+            },
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ListOrganizationsError {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <serde_json::Value as serde::Deserialize>::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::String(code) => match code.as_str() {
+                "forbidden" => Ok(Self::Forbidden),
+                "invalid_page" => Ok(Self::InvalidPage),
+                "invalid_request" => Ok(Self::InvalidRequest),
+                _ => Ok(Self::Unknown(UnknownDomainError { code, payload: None, extra: std::collections::BTreeMap::new() })),
+            },
+            serde_json::Value::Object(mut object) => {
+                let Some(code) = object.remove("code").and_then(|value| value.as_str().map(ToOwned::to_owned)) else {
+                    return Err(serde::de::Error::custom("Domain Error object is missing a string code"));
+                };
+                let payload = object.remove("payload");
+                let extra = object.into_iter().collect::<std::collections::BTreeMap<_, _>>();
+                Ok(Self::Unknown(UnknownDomainError { code, payload, extra }))
+            }
+            other => Err(serde::de::Error::custom(format!("Domain Error must be a string or object, got {other}"))),
+        }
+    }
+}
+
 pub fn encode_create_organization_request(value: &CreateOrganizationRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_create_organization_request(wire: &str) -> Result<CreateOrganizationRequest, serde_json::Error> { decode_portable_json(wire) }
 pub fn encode_create_organization_response(value: &CreateOrganizationResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_create_organization_response(wire: &str) -> Result<CreateOrganizationResponse, serde_json::Error> { decode_portable_json(wire) }
 pub fn encode_create_organization_error(value: &CreateOrganizationError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_create_organization_error(wire: &str) -> Result<CreateOrganizationError, serde_json::Error> { decode_portable_json(wire) }
+
+pub fn encode_list_organizations_request(value: &ListOrganizationsRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_list_organizations_request(wire: &str) -> Result<ListOrganizationsRequest, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_list_organizations_response(value: &ListOrganizationsResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_list_organizations_response(wire: &str) -> Result<ListOrganizationsResponse, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_list_organizations_error(value: &ListOrganizationsError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_list_organizations_error(wire: &str) -> Result<ListOrganizationsError, serde_json::Error> { decode_portable_json(wire) }
 
 #[doc(hidden)]
 pub trait __LensoIntoOrganizationAdminCreateOrganizationResult {
@@ -168,18 +313,48 @@ impl __LensoIntoOrganizationAdminCreateOrganizationResult for Result<CreateOrgan
         }
     }
 }
-impl __LensoIntoOrganizationAdminCreateOrganizationResult for Result<CreateOrganizationResponse, OrganizationAdminInvocationError> {
+impl __LensoIntoOrganizationAdminCreateOrganizationResult for Result<CreateOrganizationResponse, OrganizationAdminCreateOrganizationInvocationError> {
     fn __lenso_into_result(self) -> Result<Result<CreateOrganizationResponse, CreateOrganizationError>, RuntimeFailure> {
         match self {
             Ok(value) => Ok(Ok(value)),
-            Err(OrganizationAdminInvocationError::Domain(error)) => Ok(Err(error)),
-            Err(OrganizationAdminInvocationError::Runtime(error)) => Err(error),
+            Err(OrganizationAdminCreateOrganizationInvocationError::Domain(error)) => Ok(Err(error)),
+            Err(OrganizationAdminCreateOrganizationInvocationError::Runtime(error)) => Err(error),
+        }
+    }
+}
+
+#[doc(hidden)]
+pub trait __LensoIntoOrganizationAdminListOrganizationsResult {
+    fn __lenso_into_result(self) -> Result<Result<ListOrganizationsResponse, ListOrganizationsError>, RuntimeFailure>;
+}
+impl __LensoIntoOrganizationAdminListOrganizationsResult for Result<ListOrganizationsResponse, ListOrganizationsError> {
+    fn __lenso_into_result(self) -> Result<Result<ListOrganizationsResponse, ListOrganizationsError>, RuntimeFailure> { Ok(self) }
+}
+impl __LensoIntoOrganizationAdminListOrganizationsResult for Result<Result<ListOrganizationsResponse, ListOrganizationsError>, RuntimeFailure> {
+    fn __lenso_into_result(self) -> Result<Result<ListOrganizationsResponse, ListOrganizationsError>, RuntimeFailure> { self }
+}
+impl __LensoIntoOrganizationAdminListOrganizationsResult for Result<ListOrganizationsResponse, lenso_plugin_authoring::PluginError<ListOrganizationsError, RuntimeFailure>> {
+    fn __lenso_into_result(self) -> Result<Result<ListOrganizationsResponse, ListOrganizationsError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(lenso_plugin_authoring::PluginError::Domain(error)) => Ok(Err(error)),
+            Err(lenso_plugin_authoring::PluginError::Runtime(error)) => Err(error),
+        }
+    }
+}
+impl __LensoIntoOrganizationAdminListOrganizationsResult for Result<ListOrganizationsResponse, OrganizationAdminListOrganizationsInvocationError> {
+    fn __lenso_into_result(self) -> Result<Result<ListOrganizationsResponse, ListOrganizationsError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(OrganizationAdminListOrganizationsInvocationError::Domain(error)) => Ok(Err(error)),
+            Err(OrganizationAdminListOrganizationsInvocationError::Runtime(error)) => Err(error),
         }
     }
 }
 
 pub trait OrganizationAdminProvider: fmt::Debug + 'static {
-    fn create_organization(&self, context: InvocationContext, request: CreateOrganizationRequest) -> NativeRequestFuture<OrganizationAdmin>;
+    fn create_organization(&self, context: InvocationContext, request: CreateOrganizationRequest) -> NativeRequestFuture<OrganizationAdminCreateOrganization>;
+    fn list_organizations(&self, context: InvocationContext, request: ListOrganizationsRequest) -> NativeRequestFuture<OrganizationAdminListOrganizations>;
 }
 
 #[doc(hidden)]
@@ -188,11 +363,18 @@ macro_rules! __lenso_native_lower_organization_admin {
     ($plugin:ty, $support:path) => {
         use $support as __LensoNativeSupportOrganizationAdmin;
         impl $crate::OrganizationAdminProvider for $plugin {
-        fn create_organization(&self, context: __LensoNativeSupportOrganizationAdmin::InvocationContext, request: $crate::CreateOrganizationRequest) -> __LensoNativeSupportOrganizationAdmin::NativeRequestFuture<$crate::OrganizationAdmin> {
+        fn create_organization(&self, context: __LensoNativeSupportOrganizationAdmin::InvocationContext, request: $crate::CreateOrganizationRequest) -> __LensoNativeSupportOrganizationAdmin::NativeRequestFuture<$crate::OrganizationAdminCreateOrganization> {
             let plugin = self.clone();
             ::std::boxed::Box::pin(async move {
                 let result = <$plugin>::create_organization(&plugin, context, request).await;
                 $crate::__LensoIntoOrganizationAdminCreateOrganizationResult::__lenso_into_result(result)
+            })
+        }
+        fn list_organizations(&self, context: __LensoNativeSupportOrganizationAdmin::InvocationContext, request: $crate::ListOrganizationsRequest) -> __LensoNativeSupportOrganizationAdmin::NativeRequestFuture<$crate::OrganizationAdminListOrganizations> {
+            let plugin = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let result = <$plugin>::list_organizations(&plugin, context, request).await;
+                $crate::__LensoIntoOrganizationAdminListOrganizationsResult::__lenso_into_result(result)
             })
         }
         }
@@ -217,6 +399,7 @@ impl<P: OrganizationAdminProvider> NativeRequestEndpoint for OrganizationAdminEn
     fn descriptor_version(&self) -> &'static str { DESCRIPTOR_VERSION }
     fn operations(&self) -> &'static [&'static str] { &[
         CREATE_ORGANIZATION_OPERATION,
+        LIST_ORGANIZATIONS_OPERATION,
     ] }
     fn typed_endpoint(&self) -> Option<&dyn std::any::Any> { Some(&self.request_endpoint) }
     fn invoke(&self, operation: &str, request: Box<dyn std::any::Any>, context: InvocationContext) -> LocalBoxFuture<'static, Result<Result<Box<dyn std::any::Any>, Box<dyn std::any::Any>>, RuntimeFailure>> {
@@ -226,6 +409,19 @@ impl<P: OrganizationAdminProvider> NativeRequestEndpoint for OrganizationAdminEn
                     return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
                 };
                 let invocation = Rc::clone(&self.provider).create_organization(context, *request);
+                Box::pin(async move {
+                    invocation.await.map(|result| {
+                        result
+                            .map(|value| Box::new(value) as Box<dyn std::any::Any>)
+                            .map_err(|error| Box::new(error) as Box<dyn std::any::Any>)
+                    })
+                })
+            },
+            LIST_ORGANIZATIONS_OPERATION => {
+                let Ok(request) = request.downcast::<ListOrganizationsRequest>() else {
+                    return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
+                };
+                let invocation = Rc::clone(&self.provider).list_organizations(context, *request);
                 Box::pin(async move {
                     invocation.await.map(|result| {
                         result
@@ -271,27 +467,36 @@ macro_rules! __lenso_native_provide_organization_admin {
 
 #[derive(Debug)]
 pub struct OrganizationAdminClient {
-    create_organization: NativeRequestHandle<OrganizationAdmin>,
+    create_organization: NativeRequestHandle<OrganizationAdminCreateOrganization>,
+    list_organizations: NativeRequestHandle<OrganizationAdminListOrganizations>,
 }
 impl OrganizationAdminClient {
-    pub fn new(handle: NativeRequestHandle<OrganizationAdmin>) -> Self {
-        Self { create_organization: handle }
-    }
-
     pub fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         <Self as CapabilityClient>::from_dependencies(dependencies)
     }
 
-    pub async fn create_organization(&self, request: CreateOrganizationRequest) -> Result<CreateOrganizationResponse, OrganizationAdminInvocationError> {
+    pub async fn create_organization(&self, request: CreateOrganizationRequest) -> Result<CreateOrganizationResponse, OrganizationAdminCreateOrganizationInvocationError> {
         self.create_organization.invoke(CREATE_ORGANIZATION_OPERATION, request).await
-            .map_err(OrganizationAdminInvocationError::Runtime)?
-            .map_err(OrganizationAdminInvocationError::Domain)
+            .map_err(OrganizationAdminCreateOrganizationInvocationError::Runtime)?
+            .map_err(OrganizationAdminCreateOrganizationInvocationError::Domain)
     }
 
-    pub async fn create_organization_with_context(&self, context: InvocationContext, request: CreateOrganizationRequest) -> Result<CreateOrganizationResponse, OrganizationAdminInvocationError> {
+    pub async fn create_organization_with_context(&self, context: InvocationContext, request: CreateOrganizationRequest) -> Result<CreateOrganizationResponse, OrganizationAdminCreateOrganizationInvocationError> {
         self.create_organization.invoke_with_context(CREATE_ORGANIZATION_OPERATION, context, request).await
-            .map_err(OrganizationAdminInvocationError::Runtime)?
-            .map_err(OrganizationAdminInvocationError::Domain)
+            .map_err(OrganizationAdminCreateOrganizationInvocationError::Runtime)?
+            .map_err(OrganizationAdminCreateOrganizationInvocationError::Domain)
+    }
+
+    pub async fn list_organizations(&self, request: ListOrganizationsRequest) -> Result<ListOrganizationsResponse, OrganizationAdminListOrganizationsInvocationError> {
+        self.list_organizations.invoke(LIST_ORGANIZATIONS_OPERATION, request).await
+            .map_err(OrganizationAdminListOrganizationsInvocationError::Runtime)?
+            .map_err(OrganizationAdminListOrganizationsInvocationError::Domain)
+    }
+
+    pub async fn list_organizations_with_context(&self, context: InvocationContext, request: ListOrganizationsRequest) -> Result<ListOrganizationsResponse, OrganizationAdminListOrganizationsInvocationError> {
+        self.list_organizations.invoke_with_context(LIST_ORGANIZATIONS_OPERATION, context, request).await
+            .map_err(OrganizationAdminListOrganizationsInvocationError::Runtime)?
+            .map_err(OrganizationAdminListOrganizationsInvocationError::Domain)
     }
 }
 
@@ -304,7 +509,8 @@ impl CapabilityClient for OrganizationAdminClient {
 
     fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         Ok(Self {
-            create_organization: dependencies.one::<OrganizationAdmin>()?,
+            create_organization: dependencies.one::<OrganizationAdminCreateOrganization>()?,
+            list_organizations: dependencies.one::<OrganizationAdminListOrganizations>()?,
         })
     }
 
@@ -327,7 +533,8 @@ impl CapabilityClientMany for OrganizationAdminClient {
                 Ok(BoundCapabilityClient::new(
                     binding.provider_instance(),
                     Self {
-                    create_organization: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OrganizationAdmin>()?,
+                    create_organization: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OrganizationAdminCreateOrganization>()?,
+                    list_organizations: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OrganizationAdminListOrganizations>()?,
                     },
                 ))
             })
@@ -336,7 +543,12 @@ impl CapabilityClientMany for OrganizationAdminClient {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum OrganizationAdminInvocationError {
+pub enum OrganizationAdminCreateOrganizationInvocationError {
     Domain(CreateOrganizationError),
+    Runtime(RuntimeFailure),
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum OrganizationAdminListOrganizationsInvocationError {
+    Domain(ListOrganizationsError),
     Runtime(RuntimeFailure),
 }

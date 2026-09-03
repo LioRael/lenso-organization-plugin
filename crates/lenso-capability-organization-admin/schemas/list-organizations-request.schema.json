@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["cursor", "limit", "slug", "status"],
+  "properties": {
+    "cursor": {"$ref": "#/$defs/NullableString"},
+    "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+    "slug": {"$ref": "#/$defs/NullableString"},
+    "status": {"type": "string", "enum": ["active", "archived", "all"]}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "NullableString": {"type": ["string", "null"]}
+  }
+}

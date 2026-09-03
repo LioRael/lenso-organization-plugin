@@ -13,7 +13,8 @@ Organization branch or registry entry.
 ## Roles
 
 - Provides `lenso.organization-admin@2` for explicitly allowed administrative
-  callers to create an Organization and its first owner membership.
+  callers to list Organizations or create an Organization and its first owner
+  membership.
 - Provides `lenso.organization-membership@1` so target Plugins can ask whether
   an Auth subject is an active member or owner. The target Plugin retains final
   authorization authority and obtains role decisions from Access Control.
@@ -21,7 +22,8 @@ Organization branch or registry entry.
   Plugins that need the authoritative Organization name, slug, active state,
   and revision without direct database access.
 - Provides `lenso.organization-membership-admin@1` for separately admitted
-  callers to add and remove non-owner members with caller-scoped idempotency.
+  callers to list memberships or add and remove non-owner members with
+  caller-scoped idempotency.
 - Requires `lenso.secrets@1` during `prepare` to resolve the PostgreSQL URL.
 
 ## Lifecycle and state
@@ -48,6 +50,11 @@ caller-scoped command identity, and then add an active membership or tombstone
 a non-owner membership. Replays return the original membership ID and revision
 without repeating the mutation. Concurrent adds converge on one active
 membership, and owner removal fails closed.
+
+Admin list operations use stable opaque IDs as cursors and bounded pages.
+Organization listing can select active, archived, or all records and filter an
+exact slug. Membership listing stays inside one exact Organization and can
+select active, removed, or all records and filter an exact subject.
 
 Role definitions, permission grants, and subject-role bindings are explicitly
 outside this deletion boundary and belong to the independent Access Control

@@ -14,6 +14,8 @@ remain available through their existing crate versions and Git tags.
   `lenso.organization-directory@1` read-only Organization projection.
 - `lenso-capability-organization-membership-admin` owns the generated
   `lenso.organization-membership-admin@1` member-administration role.
+- `lenso-organization-agent-tools-plugin` privately projects Organization and
+  membership administration into six Console Agent Tools.
 - `lenso-organization-postgres-plugin` atomically owns Organizations,
   memberships, first-class ownership, caller-scoped command receipts, active
   slug uniqueness, membership revisions, and explicit schema administration.
@@ -47,6 +49,12 @@ operations carry no role, permission, or RBAC facts.
 authoritative name, slug, active state, and revision. Invitation and other peer
 Plugins use this projection instead of trusting caller-supplied Organization
 display data or reading this Plugin's tables.
+
+Organization Admin can enumerate Organizations by active state and exact slug;
+Membership Admin can enumerate active, removed, or all memberships within one
+exact Organization. Both use bounded stable-ID keyset pagination. The private
+Agent Tool adapter combines these management reads with create, add, and remove
+commands, while keeping `check_membership` in the target-facing data plane.
 
 ## Operator setup
 

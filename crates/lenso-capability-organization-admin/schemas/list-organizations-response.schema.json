@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["next_cursor", "organizations"],
+  "properties": {
+    "next_cursor": {"$ref": "#/$defs/NullableString"},
+    "organizations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/Organization"}
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "NullableString": {"type": ["string", "null"]},
+    "Organization": {
+      "type": "object",
+      "required": ["active", "name", "organization_id", "revision", "slug"],
+      "properties": {
+        "active": {"type": "boolean"},
+        "name": {"type": "string", "minLength": 1, "maxLength": 200},
+        "organization_id": {"type": "string"},
+        "revision": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        "slug": {"type": "string", "minLength": 1, "maxLength": 100}
+      },
+      "additionalProperties": false
+    }
+  }
+}
