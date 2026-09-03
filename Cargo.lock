@@ -690,7 +690,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-organization-directory"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "futures",
  "lenso-contract-runtime",
@@ -702,7 +702,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-organization-membership"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "futures",
  "lenso-contract-runtime",
