@@ -7,7 +7,10 @@ use std::{cell::RefCell, fmt, fmt::Write as _, rc::Rc, time::Duration};
 
 use lenso_capability_organization_admin::{
     CreateOrganizationError, CreateOrganizationRequest, CreateOrganizationResponse,
-    OrganizationAdmin, OrganizationAdminEndpoint, OrganizationAdminProvider,
+    ListOrganizationsError, ListOrganizationsRequest, ListOrganizationsRequestStatus,
+    ListOrganizationsResponse, Organization as OrganizationSummary,
+    OrganizationAdminCreateOrganization, OrganizationAdminEndpoint,
+    OrganizationAdminListOrganizations, OrganizationAdminProvider,
 };
 use lenso_capability_organization_directory::{
     GetOrganizationError, GetOrganizationRequest, GetOrganizationResponse, OrganizationDirectory,
@@ -18,10 +21,11 @@ use lenso_capability_organization_membership::{
     OrganizationMembershipEndpoint, OrganizationMembershipProvider,
 };
 use lenso_capability_organization_membership_admin::{
-    AddMemberError, AddMemberRequest, AddMemberResponse, OrganizationMembershipAdminAddMember,
-    OrganizationMembershipAdminEndpoint, OrganizationMembershipAdminProvider,
-    OrganizationMembershipAdminRemoveMember, RemoveMemberError, RemoveMemberRequest,
-    RemoveMemberResponse,
+    AddMemberError, AddMemberRequest, AddMemberResponse, ListMembersError, ListMembersRequest,
+    ListMembersRequestStatus, ListMembersResponse, Member, OrganizationMembershipAdminAddMember,
+    OrganizationMembershipAdminEndpoint, OrganizationMembershipAdminListMembers,
+    OrganizationMembershipAdminProvider, OrganizationMembershipAdminRemoveMember,
+    RemoveMemberError, RemoveMemberRequest, RemoveMemberResponse,
 };
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
 use lenso_kernel::{
@@ -265,11 +269,80 @@ impl OrganizationProvider {
 }
 
 impl OrganizationAdminProvider for OrganizationProvider {
+    fn list_organizations(
+        &self,
+        context: InvocationContext,
+        request: ListOrganizationsRequest,
+    ) -> NativeRequestFuture<OrganizationAdminListOrganizations> {
+        let authorized = self.authorized_admin_caller(&context).is_some();
+        let valid_page = (1..=100).contains(&request.limit)
+            && request
+                .cursor
+                .as_deref()
+                .is_none_or(|cursor| valid_name(cursor, 256));
+        let valid_filter = request.slug.as_deref().is_none_or(valid_slug);
+        let prepared = self.prepared();
+        Box::pin(async move {
+            if !authorized {
+                return Ok(Err(ListOrganizationsError::Forbidden));
+            }
+            if !valid_page {
+                return Ok(Err(ListOrganizationsError::InvalidPage));
+            }
+            if !valid_filter {
+                return Ok(Err(ListOrganizationsError::InvalidRequest));
+            }
+            let prepared = prepared?;
+            let status = match request.status {
+                ListOrganizationsRequestStatus::Active => "active",
+                ListOrganizationsRequestStatus::Archived => "archived",
+                ListOrganizationsRequestStatus::All => "all",
+            };
+            let rows: Vec<(String, String, String, bool, i64)> = sqlx::query_as(
+                "SELECT organization_id,name,slug,archived_at IS NULL,revision FROM organizations WHERE ($1='all' OR ($1='active' AND archived_at IS NULL) OR ($1='archived' AND archived_at IS NOT NULL)) AND ($2::text IS NULL OR slug=$2) AND ($3::text IS NULL OR organization_id>$3) ORDER BY organization_id LIMIT $4",
+            )
+            .bind(status)
+            .bind(&request.slug)
+            .bind(&request.cursor)
+            .bind(request.limit + 1)
+            .fetch_all(prepared.postgres.pool())
+            .await
+            .map_err(|source| database_runtime("list organizations", source))?;
+            let page_size = usize::try_from(request.limit)
+                .expect("validated Organization list limit must fit into usize");
+            let has_more = rows.len() > page_size;
+            let organizations = rows
+                .into_iter()
+                .take(page_size)
+                .map(
+                    |(organization_id, name, slug, active, revision)| OrganizationSummary {
+                        active,
+                        name,
+                        organization_id,
+                        revision: revision.to_string(),
+                        slug,
+                    },
+                )
+                .collect::<Vec<_>>();
+            let next_cursor = has_more
+                .then(|| {
+                    organizations
+                        .last()
+                        .map(|organization| organization.organization_id.clone())
+                })
+                .flatten();
+            Ok(Ok(ListOrganizationsResponse {
+                next_cursor,
+                organizations,
+            }))
+        })
+    }
+
     fn create_organization(
         &self,
         context: InvocationContext,
         request: CreateOrganizationRequest,
-    ) -> NativeRequestFuture<OrganizationAdmin> {
+    ) -> NativeRequestFuture<OrganizationAdminCreateOrganization> {
         let caller_instance = self.authorized_admin_caller(&context).map(str::to_owned);
         let prepared = self.prepared();
         Box::pin(async move {
@@ -291,6 +364,102 @@ impl OrganizationAdminProvider for OrganizationProvider {
 }
 
 impl OrganizationMembershipAdminProvider for OrganizationProvider {
+    fn list_members(
+        &self,
+        context: InvocationContext,
+        request: ListMembersRequest,
+    ) -> NativeRequestFuture<OrganizationMembershipAdminListMembers> {
+        let authorized = self.authorized_membership_admin_caller(&context).is_some();
+        let valid_page = (1..=100).contains(&request.limit)
+            && request
+                .cursor
+                .as_deref()
+                .is_none_or(|cursor| valid_name(cursor, 256));
+        let valid_filter = valid_name(&request.organization_id, 256)
+            && request
+                .subject
+                .as_deref()
+                .is_none_or(|subject| valid_name(subject, 256));
+        let prepared = self.prepared();
+        Box::pin(async move {
+            if !authorized {
+                return Ok(Err(ListMembersError::Forbidden));
+            }
+            if !valid_page {
+                return Ok(Err(ListMembersError::InvalidPage));
+            }
+            if !valid_filter {
+                return Ok(Err(ListMembersError::InvalidRequest));
+            }
+            let prepared = prepared?;
+            let mut transaction = prepared
+                .postgres
+                .pool()
+                .begin()
+                .await
+                .map_err(|source| database_runtime("begin Organization member list", source))?;
+            sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+                .execute(&mut *transaction)
+                .await
+                .map_err(|source| database_runtime("establish member list snapshot", source))?;
+            let organization_exists = sqlx::query_scalar::<_, bool>(
+                "SELECT true FROM organizations WHERE organization_id=$1",
+            )
+            .bind(&request.organization_id)
+            .fetch_optional(&mut *transaction)
+            .await
+            .map_err(|source| database_runtime("locate Organization for member list", source))?
+            .unwrap_or(false);
+            if !organization_exists {
+                return Ok(Err(ListMembersError::OrganizationNotFound));
+            }
+            let status = match request.status {
+                ListMembersRequestStatus::Active => "active",
+                ListMembersRequestStatus::Removed => "removed",
+                ListMembersRequestStatus::All => "all",
+            };
+            let rows: Vec<(String, String, bool, bool, i64)> = sqlx::query_as(
+                "SELECT membership_id,subject,is_owner,removed_at IS NULL,revision FROM organization_memberships WHERE organization_id=$1 AND ($2='all' OR ($2='active' AND removed_at IS NULL) OR ($2='removed' AND removed_at IS NOT NULL)) AND ($3::text IS NULL OR subject=$3) AND ($4::text IS NULL OR membership_id>$4) ORDER BY membership_id LIMIT $5",
+            )
+            .bind(&request.organization_id)
+            .bind(status)
+            .bind(&request.subject)
+            .bind(&request.cursor)
+            .bind(request.limit + 1)
+            .fetch_all(&mut *transaction)
+            .await
+            .map_err(|source| database_runtime("list Organization members", source))?;
+            transaction
+                .commit()
+                .await
+                .map_err(|source| database_runtime("commit Organization member list", source))?;
+            let page_size = usize::try_from(request.limit)
+                .expect("validated member list limit must fit into usize");
+            let has_more = rows.len() > page_size;
+            let members = rows
+                .into_iter()
+                .take(page_size)
+                .map(
+                    |(membership_id, subject, is_owner, active, revision)| Member {
+                        active,
+                        is_owner,
+                        membership_id,
+                        revision: revision.to_string(),
+                        subject,
+                    },
+                )
+                .collect::<Vec<_>>();
+            let next_cursor = has_more
+                .then(|| members.last().map(|member| member.membership_id.clone()))
+                .flatten();
+            Ok(Ok(ListMembersResponse {
+                members,
+                next_cursor,
+                organization_id: request.organization_id,
+            }))
+        })
+    }
+
     fn add_member(
         &self,
         context: InvocationContext,
@@ -1142,6 +1311,20 @@ mod tests {
         };
         let context = InvocationContext::new(1, None, CancellationToken::new())
             .with_caller_instance("untrusted");
+        let list = provider
+            .list_organizations(
+                context.clone(),
+                ListOrganizationsRequest {
+                    cursor: None,
+                    limit: 25,
+                    slug: None,
+                    status: ListOrganizationsRequestStatus::Active,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(list, Err(ListOrganizationsError::Forbidden));
+
         let result = provider
             .create_organization(
                 context,
@@ -1167,6 +1350,20 @@ mod tests {
         };
         let context = InvocationContext::new(1, None, CancellationToken::new())
             .with_caller_instance("business-admin");
+        let invalid_page = provider
+            .list_organizations(
+                context.clone(),
+                ListOrganizationsRequest {
+                    cursor: None,
+                    limit: 0,
+                    slug: None,
+                    status: ListOrganizationsRequestStatus::Active,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(invalid_page, Err(ListOrganizationsError::InvalidPage));
+
         let result = provider
             .create_organization(
                 context,
@@ -1192,6 +1389,21 @@ mod tests {
         };
         let context = InvocationContext::new(1, None, CancellationToken::new())
             .with_caller_instance("untrusted");
+
+        let list = provider
+            .list_members(
+                context.clone(),
+                ListMembersRequest {
+                    cursor: None,
+                    limit: 25,
+                    organization_id: "org_acme".to_owned(),
+                    status: ListMembersRequestStatus::Active,
+                    subject: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(list, Err(ListMembersError::Forbidden));
 
         let add = provider
             .add_member(
@@ -1230,6 +1442,21 @@ mod tests {
         };
         let context = InvocationContext::new(1, None, CancellationToken::new())
             .with_caller_instance("membership-admin");
+
+        let invalid_page = provider
+            .list_members(
+                context.clone(),
+                ListMembersRequest {
+                    cursor: None,
+                    limit: 101,
+                    organization_id: "org_acme".to_owned(),
+                    status: ListMembersRequestStatus::Active,
+                    subject: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(invalid_page, Err(ListMembersError::InvalidPage));
 
         let add = provider
             .add_member(
@@ -1418,6 +1645,64 @@ mod tests {
         assert!(second_caller.created);
         assert_ne!(second_caller.organization_id, created.organization_id);
 
+        let first_page = provider
+            .list_organizations(
+                admin_context.clone(),
+                ListOrganizationsRequest {
+                    cursor: None,
+                    limit: 1,
+                    slug: None,
+                    status: ListOrganizationsRequestStatus::Active,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(first_page.organizations.len(), 1);
+        let second_page = provider
+            .list_organizations(
+                admin_context.clone(),
+                ListOrganizationsRequest {
+                    cursor: first_page.next_cursor.clone(),
+                    limit: 1,
+                    slug: None,
+                    status: ListOrganizationsRequestStatus::Active,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(second_page.organizations.len(), 1);
+        assert!(second_page.next_cursor.is_none());
+        let listed_ids = first_page
+            .organizations
+            .iter()
+            .chain(&second_page.organizations)
+            .map(|organization| organization.organization_id.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(listed_ids.len(), 2);
+        assert!(listed_ids.contains(created.organization_id.as_str()));
+        assert!(listed_ids.contains(second_caller.organization_id.as_str()));
+
+        let slug_match = provider
+            .list_organizations(
+                admin_context.clone(),
+                ListOrganizationsRequest {
+                    cursor: None,
+                    limit: 25,
+                    slug: Some("acme".to_owned()),
+                    status: ListOrganizationsRequestStatus::All,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(slug_match.organizations.len(), 1);
+        assert_eq!(
+            slug_match.organizations[0].organization_id,
+            created.organization_id
+        );
+
         let duplicate = provider
             .create_organization(
                 admin_context,
@@ -1546,6 +1831,27 @@ mod tests {
         assert!(active.active);
         assert!(!active.owner);
 
+        let active_members = provider
+            .list_members(
+                InvocationContext::new(5, None, CancellationToken::new())
+                    .with_caller_instance("membership-admin"),
+                ListMembersRequest {
+                    cursor: None,
+                    limit: 25,
+                    organization_id: organization.organization_id.clone(),
+                    status: ListMembersRequestStatus::Active,
+                    subject: Some("usr_member".to_owned()),
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(active_members.organization_id, organization.organization_id);
+        assert_eq!(active_members.members.len(), 1);
+        assert_eq!(active_members.members[0].subject, "usr_member");
+        assert!(active_members.members[0].active);
+        assert!(!active_members.members[0].is_owner);
+
         let conflict = provider
             .add_member(
                 InvocationContext::new(5, None, CancellationToken::new())
@@ -1632,6 +1938,28 @@ mod tests {
         assert!(!inactive.active);
         assert!(!inactive.owner);
 
+        let removed_members = provider
+            .list_members(
+                InvocationContext::new(11, None, CancellationToken::new())
+                    .with_caller_instance("membership-admin"),
+                ListMembersRequest {
+                    cursor: None,
+                    limit: 25,
+                    organization_id: organization.organization_id.clone(),
+                    status: ListMembersRequestStatus::Removed,
+                    subject: None,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(removed_members.members.len(), 1);
+        assert_eq!(
+            removed_members.members[0].membership_id,
+            first_add.membership_id
+        );
+        assert!(!removed_members.members[0].active);
+
         let prepared = provider.prepared().unwrap();
         sqlx::query(
             "UPDATE organizations SET archived_at=transaction_timestamp(),revision=2 WHERE organization_id=$1",
@@ -1716,6 +2044,25 @@ mod tests {
         assert_eq!(
             missing_organization,
             Err(AddMemberError::OrganizationNotFound)
+        );
+
+        let missing_member_list = provider
+            .list_members(
+                InvocationContext::new(16, None, CancellationToken::new())
+                    .with_caller_instance("membership-admin"),
+                ListMembersRequest {
+                    cursor: None,
+                    limit: 25,
+                    organization_id: "org_missing".to_owned(),
+                    status: ListMembersRequestStatus::All,
+                    subject: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            missing_member_list,
+            Err(ListMembersError::OrganizationNotFound)
         );
 
         prepared.postgres.pool().close().await;

@@ -5,7 +5,7 @@ use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture
 
 use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany};
 pub const CAPABILITY_ID: &str = "lenso.organization-membership-admin@1";
-pub const DESCRIPTOR_VERSION: &str = "1.0.0";
+pub const DESCRIPTOR_VERSION: &str = "1.1.0";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const ORGANIZATION_MEMBERSHIP_ADMIN_CAPABILITY_ID: &str = CAPABILITY_ID;
@@ -13,17 +13,18 @@ pub const ORGANIZATION_MEMBERSHIP_ADMIN_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VE
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_provided_organization_membership_admin { () => { "{\"capability_id\":\"lenso.organization-membership-admin@1\",\"descriptor_version\":\"1.0.0\",\"operations\":[\"add_member\",\"remove_member\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
+macro_rules! __lenso_provided_organization_membership_admin { () => { "{\"capability_id\":\"lenso.organization-membership-admin@1\",\"descriptor_version\":\"1.1.0\",\"operations\":[\"add_member\",\"list_members\",\"remove_member\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_organization_membership_admin_client { () => { "{\"capability_id\":\"lenso.organization-membership-admin@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" }; }
+macro_rules! __lenso_required_organization_membership_admin_client { () => { "{\"capability_id\":\"lenso.organization-membership-admin@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" }; }
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_many_organization_membership_admin_client { () => { "{\"capability_id\":\"lenso.organization-membership-admin@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" }; }
+macro_rules! __lenso_required_many_organization_membership_admin_client { () => { "{\"capability_id\":\"lenso.organization-membership-admin@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" }; }
 
 pub const ADD_MEMBER_OPERATION: &str = "add_member";
+pub const LIST_MEMBERS_OPERATION: &str = "list_members";
 pub const REMOVE_MEMBER_OPERATION: &str = "remove_member";
 
 pub use lenso_contract_runtime::{UnknownDomainError};
@@ -59,6 +60,76 @@ pub struct AddMemberResponse {
 pub enum AddMemberError {
     Forbidden,
     IdempotencyConflict,
+    InvalidRequest,
+    OrganizationNotFound,
+    Unknown(UnknownDomainError),
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ListMembersRequest {
+    #[serde(rename = "cursor")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub cursor: Option<String>,
+    #[serde(rename = "limit")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub limit: i64,
+    #[serde(rename = "organization_id")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub organization_id: String,
+    #[serde(rename = "status")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub status: ListMembersRequestStatus,
+    #[serde(rename = "subject")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub subject: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum ListMembersRequestStatus {
+    #[serde(rename = "active")]
+    Active,
+    #[serde(rename = "removed")]
+    Removed,
+    #[serde(rename = "all")]
+    All,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ListMembersResponse {
+    #[serde(rename = "members")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub members: Vec<Member>,
+    #[serde(rename = "next_cursor")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub next_cursor: Option<String>,
+    #[serde(rename = "organization_id")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub organization_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Member {
+    #[serde(rename = "active")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub active: bool,
+    #[serde(rename = "is_owner")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub is_owner: bool,
+    #[serde(rename = "membership_id")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub membership_id: String,
+    #[serde(rename = "revision")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub revision: String,
+    #[serde(rename = "subject")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub subject: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ListMembersError {
+    Forbidden,
+    InvalidPage,
     InvalidRequest,
     OrganizationNotFound,
     Unknown(UnknownDomainError),
@@ -125,6 +196,29 @@ impl RequestCapability for OrganizationMembershipAdminAddMember {
 }
 
 #[derive(Debug)]
+pub struct OrganizationMembershipAdminListMembers;
+impl RequestCapability for OrganizationMembershipAdminListMembers {
+    type Request = ListMembersRequest;
+    type Response = ListMembersResponse;
+    type DomainError = ListMembersError;
+    const ID: &'static str = CAPABILITY_ID;
+    const DESCRIPTOR_VERSION: &'static str = DESCRIPTOR_VERSION;
+
+    fn invoke_native(endpoint: &dyn NativeRequestEndpoint, operation: &str, request: Self::Request, context: InvocationContext) -> NativeRequestFuture<Self> {
+        if operation != LIST_MEMBERS_OPERATION {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        }
+        let Some(typed_endpoint) = endpoint
+            .typed_endpoint()
+            .and_then(|endpoint| endpoint.downcast_ref::<OrganizationMembershipAdminRequestEndpoint>())
+        else {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        };
+        Rc::clone(&typed_endpoint.provider).list_members(context, request)
+    }
+}
+
+#[derive(Debug)]
 pub struct OrganizationMembershipAdminRemoveMember;
 impl RequestCapability for OrganizationMembershipAdminRemoveMember {
     type Request = RemoveMemberRequest;
@@ -183,6 +277,59 @@ impl<'de> serde::Deserialize<'de> for AddMemberError {
             serde_json::Value::String(code) => match code.as_str() {
                 "forbidden" => Ok(Self::Forbidden),
                 "idempotency_conflict" => Ok(Self::IdempotencyConflict),
+                "invalid_request" => Ok(Self::InvalidRequest),
+                "organization_not_found" => Ok(Self::OrganizationNotFound),
+                _ => Ok(Self::Unknown(UnknownDomainError { code, payload: None, extra: std::collections::BTreeMap::new() })),
+            },
+            serde_json::Value::Object(mut object) => {
+                let Some(code) = object.remove("code").and_then(|value| value.as_str().map(ToOwned::to_owned)) else {
+                    return Err(serde::de::Error::custom("Domain Error object is missing a string code"));
+                };
+                let payload = object.remove("payload");
+                let extra = object.into_iter().collect::<std::collections::BTreeMap<_, _>>();
+                Ok(Self::Unknown(UnknownDomainError { code, payload, extra }))
+            }
+            other => Err(serde::de::Error::custom(format!("Domain Error must be a string or object, got {other}"))),
+        }
+    }
+}
+
+impl serde::Serialize for ListMembersError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        match self {
+            Self::Forbidden => serializer.serialize_str("forbidden"),
+            Self::InvalidPage => serializer.serialize_str("invalid_page"),
+            Self::InvalidRequest => serializer.serialize_str("invalid_request"),
+            Self::OrganizationNotFound => serializer.serialize_str("organization_not_found"),
+            Self::Unknown(value) => {
+                let mut map = serializer.serialize_map(Some(1 + usize::from(value.payload.is_some()) + value.extra.len()))?;
+                map.serialize_entry("code", &value.code)?;
+                if let Some(payload) = &value.payload {
+                    map.serialize_entry("payload", payload)?;
+                }
+                for (key, extra) in &value.extra {
+                    map.serialize_entry(key, extra)?;
+                }
+                map.end()
+            },
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ListMembersError {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <serde_json::Value as serde::Deserialize>::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::String(code) => match code.as_str() {
+                "forbidden" => Ok(Self::Forbidden),
+                "invalid_page" => Ok(Self::InvalidPage),
                 "invalid_request" => Ok(Self::InvalidRequest),
                 "organization_not_found" => Ok(Self::OrganizationNotFound),
                 _ => Ok(Self::Unknown(UnknownDomainError { code, payload: None, extra: std::collections::BTreeMap::new() })),
@@ -264,6 +411,13 @@ pub fn decode_add_member_response(wire: &str) -> Result<AddMemberResponse, serde
 pub fn encode_add_member_error(value: &AddMemberError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_add_member_error(wire: &str) -> Result<AddMemberError, serde_json::Error> { decode_portable_json(wire) }
 
+pub fn encode_list_members_request(value: &ListMembersRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_list_members_request(wire: &str) -> Result<ListMembersRequest, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_list_members_response(value: &ListMembersResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_list_members_response(wire: &str) -> Result<ListMembersResponse, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_list_members_error(value: &ListMembersError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_list_members_error(wire: &str) -> Result<ListMembersError, serde_json::Error> { decode_portable_json(wire) }
+
 pub fn encode_remove_member_request(value: &RemoveMemberRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_remove_member_request(wire: &str) -> Result<RemoveMemberRequest, serde_json::Error> { decode_portable_json(wire) }
 pub fn encode_remove_member_response(value: &RemoveMemberResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
@@ -301,6 +455,35 @@ impl __LensoIntoOrganizationMembershipAdminAddMemberResult for Result<AddMemberR
 }
 
 #[doc(hidden)]
+pub trait __LensoIntoOrganizationMembershipAdminListMembersResult {
+    fn __lenso_into_result(self) -> Result<Result<ListMembersResponse, ListMembersError>, RuntimeFailure>;
+}
+impl __LensoIntoOrganizationMembershipAdminListMembersResult for Result<ListMembersResponse, ListMembersError> {
+    fn __lenso_into_result(self) -> Result<Result<ListMembersResponse, ListMembersError>, RuntimeFailure> { Ok(self) }
+}
+impl __LensoIntoOrganizationMembershipAdminListMembersResult for Result<Result<ListMembersResponse, ListMembersError>, RuntimeFailure> {
+    fn __lenso_into_result(self) -> Result<Result<ListMembersResponse, ListMembersError>, RuntimeFailure> { self }
+}
+impl __LensoIntoOrganizationMembershipAdminListMembersResult for Result<ListMembersResponse, lenso_plugin_authoring::PluginError<ListMembersError, RuntimeFailure>> {
+    fn __lenso_into_result(self) -> Result<Result<ListMembersResponse, ListMembersError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(lenso_plugin_authoring::PluginError::Domain(error)) => Ok(Err(error)),
+            Err(lenso_plugin_authoring::PluginError::Runtime(error)) => Err(error),
+        }
+    }
+}
+impl __LensoIntoOrganizationMembershipAdminListMembersResult for Result<ListMembersResponse, OrganizationMembershipAdminListMembersInvocationError> {
+    fn __lenso_into_result(self) -> Result<Result<ListMembersResponse, ListMembersError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(OrganizationMembershipAdminListMembersInvocationError::Domain(error)) => Ok(Err(error)),
+            Err(OrganizationMembershipAdminListMembersInvocationError::Runtime(error)) => Err(error),
+        }
+    }
+}
+
+#[doc(hidden)]
 pub trait __LensoIntoOrganizationMembershipAdminRemoveMemberResult {
     fn __lenso_into_result(self) -> Result<Result<RemoveMemberResponse, RemoveMemberError>, RuntimeFailure>;
 }
@@ -331,6 +514,7 @@ impl __LensoIntoOrganizationMembershipAdminRemoveMemberResult for Result<RemoveM
 
 pub trait OrganizationMembershipAdminProvider: fmt::Debug + 'static {
     fn add_member(&self, context: InvocationContext, request: AddMemberRequest) -> NativeRequestFuture<OrganizationMembershipAdminAddMember>;
+    fn list_members(&self, context: InvocationContext, request: ListMembersRequest) -> NativeRequestFuture<OrganizationMembershipAdminListMembers>;
     fn remove_member(&self, context: InvocationContext, request: RemoveMemberRequest) -> NativeRequestFuture<OrganizationMembershipAdminRemoveMember>;
 }
 
@@ -345,6 +529,13 @@ macro_rules! __lenso_native_lower_organization_membership_admin {
             ::std::boxed::Box::pin(async move {
                 let result = <$plugin>::add_member(&plugin, context, request).await;
                 $crate::__LensoIntoOrganizationMembershipAdminAddMemberResult::__lenso_into_result(result)
+            })
+        }
+        fn list_members(&self, context: __LensoNativeSupportOrganizationMembershipAdmin::InvocationContext, request: $crate::ListMembersRequest) -> __LensoNativeSupportOrganizationMembershipAdmin::NativeRequestFuture<$crate::OrganizationMembershipAdminListMembers> {
+            let plugin = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let result = <$plugin>::list_members(&plugin, context, request).await;
+                $crate::__LensoIntoOrganizationMembershipAdminListMembersResult::__lenso_into_result(result)
             })
         }
         fn remove_member(&self, context: __LensoNativeSupportOrganizationMembershipAdmin::InvocationContext, request: $crate::RemoveMemberRequest) -> __LensoNativeSupportOrganizationMembershipAdmin::NativeRequestFuture<$crate::OrganizationMembershipAdminRemoveMember> {
@@ -376,6 +567,7 @@ impl<P: OrganizationMembershipAdminProvider> NativeRequestEndpoint for Organizat
     fn descriptor_version(&self) -> &'static str { DESCRIPTOR_VERSION }
     fn operations(&self) -> &'static [&'static str] { &[
         ADD_MEMBER_OPERATION,
+        LIST_MEMBERS_OPERATION,
         REMOVE_MEMBER_OPERATION,
     ] }
     fn typed_endpoint(&self) -> Option<&dyn std::any::Any> { Some(&self.request_endpoint) }
@@ -386,6 +578,19 @@ impl<P: OrganizationMembershipAdminProvider> NativeRequestEndpoint for Organizat
                     return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
                 };
                 let invocation = Rc::clone(&self.provider).add_member(context, *request);
+                Box::pin(async move {
+                    invocation.await.map(|result| {
+                        result
+                            .map(|value| Box::new(value) as Box<dyn std::any::Any>)
+                            .map_err(|error| Box::new(error) as Box<dyn std::any::Any>)
+                    })
+                })
+            },
+            LIST_MEMBERS_OPERATION => {
+                let Ok(request) = request.downcast::<ListMembersRequest>() else {
+                    return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
+                };
+                let invocation = Rc::clone(&self.provider).list_members(context, *request);
                 Box::pin(async move {
                     invocation.await.map(|result| {
                         result
@@ -445,6 +650,7 @@ macro_rules! __lenso_native_provide_organization_membership_admin {
 #[derive(Debug)]
 pub struct OrganizationMembershipAdminClient {
     add_member: NativeRequestHandle<OrganizationMembershipAdminAddMember>,
+    list_members: NativeRequestHandle<OrganizationMembershipAdminListMembers>,
     remove_member: NativeRequestHandle<OrganizationMembershipAdminRemoveMember>,
 }
 impl OrganizationMembershipAdminClient {
@@ -462,6 +668,18 @@ impl OrganizationMembershipAdminClient {
         self.add_member.invoke_with_context(ADD_MEMBER_OPERATION, context, request).await
             .map_err(OrganizationMembershipAdminAddMemberInvocationError::Runtime)?
             .map_err(OrganizationMembershipAdminAddMemberInvocationError::Domain)
+    }
+
+    pub async fn list_members(&self, request: ListMembersRequest) -> Result<ListMembersResponse, OrganizationMembershipAdminListMembersInvocationError> {
+        self.list_members.invoke(LIST_MEMBERS_OPERATION, request).await
+            .map_err(OrganizationMembershipAdminListMembersInvocationError::Runtime)?
+            .map_err(OrganizationMembershipAdminListMembersInvocationError::Domain)
+    }
+
+    pub async fn list_members_with_context(&self, context: InvocationContext, request: ListMembersRequest) -> Result<ListMembersResponse, OrganizationMembershipAdminListMembersInvocationError> {
+        self.list_members.invoke_with_context(LIST_MEMBERS_OPERATION, context, request).await
+            .map_err(OrganizationMembershipAdminListMembersInvocationError::Runtime)?
+            .map_err(OrganizationMembershipAdminListMembersInvocationError::Domain)
     }
 
     pub async fn remove_member(&self, request: RemoveMemberRequest) -> Result<RemoveMemberResponse, OrganizationMembershipAdminRemoveMemberInvocationError> {
@@ -487,6 +705,7 @@ impl CapabilityClient for OrganizationMembershipAdminClient {
     fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         Ok(Self {
             add_member: dependencies.one::<OrganizationMembershipAdminAddMember>()?,
+            list_members: dependencies.one::<OrganizationMembershipAdminListMembers>()?,
             remove_member: dependencies.one::<OrganizationMembershipAdminRemoveMember>()?,
         })
     }
@@ -511,6 +730,7 @@ impl CapabilityClientMany for OrganizationMembershipAdminClient {
                     binding.provider_instance(),
                     Self {
                     add_member: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OrganizationMembershipAdminAddMember>()?,
+                    list_members: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OrganizationMembershipAdminListMembers>()?,
                     remove_member: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OrganizationMembershipAdminRemoveMember>()?,
                     },
                 ))
@@ -522,6 +742,11 @@ impl CapabilityClientMany for OrganizationMembershipAdminClient {
 #[derive(Clone, Debug, PartialEq)]
 pub enum OrganizationMembershipAdminAddMemberInvocationError {
     Domain(AddMemberError),
+    Runtime(RuntimeFailure),
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum OrganizationMembershipAdminListMembersInvocationError {
+    Domain(ListMembersError),
     Runtime(RuntimeFailure),
 }
 #[derive(Clone, Debug, PartialEq)]

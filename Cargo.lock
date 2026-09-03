@@ -256,7 +256,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -633,6 +633,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "lenso"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d523132053b8b6a73ec107e50797e0c631f9973a1ddb0178f37a2f2266de64ed"
+dependencies = [
+ "futures",
+ "lenso-kernel",
+ "lenso-native-adapter",
+ "lenso-plugin-authoring",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lenso-app-plan"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -644,8 +658,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-capability-agent-tool-provider"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba82adc6b3f227a2ca511be05584cf871afdc958cf00ae0085efc15c63c4cf38"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen",
+ "lenso-contract-runtime",
+ "lenso-guest-sdk",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "lenso-runtime-codec",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lenso-capability-organization-admin"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "futures",
  "lenso-contract-runtime",
@@ -681,7 +714,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-organization-membership-admin"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "futures",
  "lenso-contract-runtime",
@@ -753,6 +786,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-guest-sdk"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c94cad4370ff9fdefba039a001ea099889db91ac676707330b2f09d3940326df"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lenso-kernel"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -792,8 +835,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-organization-agent-tools-plugin"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso",
+ "lenso-capability-agent-tool-provider",
+ "lenso-capability-organization-admin",
+ "lenso-capability-organization-directory",
+ "lenso-capability-organization-membership-admin",
+ "lenso-kernel",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lenso-organization-postgres-plugin"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "futures",
  "getrandom 0.4.3",
@@ -1113,7 +1171,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1494,7 +1552,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

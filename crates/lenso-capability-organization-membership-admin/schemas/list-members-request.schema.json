@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["cursor", "limit", "organization_id", "status", "subject"],
+  "properties": {
+    "cursor": {"$ref": "#/$defs/NullableString"},
+    "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+    "organization_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "status": {"type": "string", "enum": ["active", "removed", "all"]},
+    "subject": {"$ref": "#/$defs/NullableString"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "NullableString": {"type": ["string", "null"]}
+  }
+}

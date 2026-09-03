@@ -1,9 +1,16 @@
 {
   "id": "lenso.organization-membership-admin@1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "portable": true,
   "cross_lane_transfer": true,
   "operations": [
+    {
+      "name": "list_members",
+      "interaction": "request",
+      "request_schema": "schemas/list-members-request.schema.json",
+      "response_schema": "schemas/list-members-response.schema.json",
+      "domain_error_schema": "schemas/list-members-error.schema.json"
+    },
     {
       "name": "add_member",
       "interaction": "request",
