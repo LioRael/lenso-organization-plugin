@@ -11,8 +11,8 @@ description = "PostgreSQL-backed Organization Plugin for Lenso vNext."
 futures.workspace = true
 getrandom.workspace = true
 lenso-capability-organization-admin = { path = "../lenso-capability-organization-admin", version = "0.3.0" }
-lenso-capability-organization-directory = { path = "../lenso-capability-organization-directory", version = "0.1.1" }
-lenso-capability-organization-membership = { path = "../lenso-capability-organization-membership", version = "0.1.1" }
+lenso-capability-organization-directory = { path = "../lenso-capability-organization-directory", version = "0.1.2" }
+lenso-capability-organization-membership = { path = "../lenso-capability-organization-membership", version = "0.1.2" }
 lenso-capability-organization-membership-admin = { path = "../lenso-capability-organization-membership-admin", version = "0.2.0" }
 lenso-capability-secrets.workspace = true
 lenso-kernel.workspace = true

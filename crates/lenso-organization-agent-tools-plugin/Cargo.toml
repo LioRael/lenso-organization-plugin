@@ -17,7 +17,7 @@ futures.workspace = true
 lenso.workspace = true
 lenso-capability-agent-tool-provider.workspace = true
 lenso-capability-organization-admin = { path = "../lenso-capability-organization-admin", version = "0.3.0" }
-lenso-capability-organization-directory = { path = "../lenso-capability-organization-directory", version = "0.1.1" }
+lenso-capability-organization-directory = { path = "../lenso-capability-organization-directory", version = "0.1.2" }
 lenso-capability-organization-membership-admin = { path = "../lenso-capability-organization-membership-admin", version = "0.2.0" }
 lenso-kernel.workspace = true
 serde.workspace = true
