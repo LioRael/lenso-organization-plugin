@@ -3,13 +3,16 @@ use std::{fmt, rc::Rc};
 use futures::future::LocalBoxFuture;
 use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture, NativeRequestHandle, PluginDependencies, RequestCapability, RuntimeFailure};
 
-use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany};
+use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.organization-membership-admin@1";
 pub const DESCRIPTOR_VERSION: &str = "1.1.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:3c6e9b03eb213631f332979fe4b3dd11fdb67a5e9392cc3195770aeaec0885f8";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const ORGANIZATION_MEMBERSHIP_ADMIN_CAPABILITY_ID: &str = CAPABILITY_ID;
 pub const ORGANIZATION_MEMBERSHIP_ADMIN_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VERSION;
+pub const ORGANIZATION_MEMBERSHIP_ADMIN_DESCRIPTOR_DIGEST: &str = DESCRIPTOR_DIGEST;
+pub const ORGANIZATION_MEMBERSHIP_ADMIN_CONTRACT: CapabilityReference<OrganizationMembershipAdminClient> = CapabilityReference::new(CAPABILITY_ID, DESCRIPTOR_VERSION, DESCRIPTOR_DIGEST);
 
 #[doc(hidden)]
 #[macro_export]
@@ -17,11 +20,23 @@ macro_rules! __lenso_provided_organization_membership_admin { () => { "{\"capabi
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_organization_membership_admin_client { () => { "{\"capability_id\":\"lenso.organization-membership-admin@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" }; }
+macro_rules! __lenso_required_organization_membership_admin_client {
+    () => { "{\"capability_id\":\"lenso.organization-membership-admin@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.organization-membership-admin@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}") };
+}
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_many_organization_membership_admin_client { () => { "{\"capability_id\":\"lenso.organization-membership-admin@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" }; }
+macro_rules! __lenso_required_optional_organization_membership_admin_client {
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.organization-membership-admin@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"optional\"}") };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_required_many_organization_membership_admin_client {
+    () => { "{\"capability_id\":\"lenso.organization-membership-admin@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.organization-membership-admin@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}") };
+}
 
 pub const ADD_MEMBER_OPERATION: &str = "add_member";
 pub const LIST_MEMBERS_OPERATION: &str = "list_members";
@@ -549,6 +564,71 @@ macro_rules! __lenso_native_lower_organization_membership_admin {
     };
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_object_organization_membership_admin {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportOrganizationMembershipAdmin;
+        impl $crate::OrganizationMembershipAdminProvider for $object {
+        fn add_member(&self, context: __LensoNativeSupportOrganizationMembershipAdmin::InvocationContext, request: $crate::AddMemberRequest) -> __LensoNativeSupportOrganizationMembershipAdmin::NativeRequestFuture<$crate::OrganizationMembershipAdminAddMember> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::add_member(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoOrganizationMembershipAdminAddMemberResult::__lenso_into_result(result)
+            })
+        }
+        fn list_members(&self, context: __LensoNativeSupportOrganizationMembershipAdmin::InvocationContext, request: $crate::ListMembersRequest) -> __LensoNativeSupportOrganizationMembershipAdmin::NativeRequestFuture<$crate::OrganizationMembershipAdminListMembers> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::list_members(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoOrganizationMembershipAdminListMembersResult::__lenso_into_result(result)
+            })
+        }
+        fn remove_member(&self, context: __LensoNativeSupportOrganizationMembershipAdmin::InvocationContext, request: $crate::RemoveMemberRequest) -> __LensoNativeSupportOrganizationMembershipAdmin::NativeRequestFuture<$crate::OrganizationMembershipAdminRemoveMember> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::remove_member(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoOrganizationMembershipAdminRemoveMemberResult::__lenso_into_result(result)
+            })
+        }
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_trait_object_organization_membership_admin {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportOrganizationMembershipAdmin;
+        impl $crate::OrganizationMembershipAdminProvider for $object {
+        fn add_member(&self, context: __LensoNativeSupportOrganizationMembershipAdmin::InvocationContext, request: $crate::AddMemberRequest) -> __LensoNativeSupportOrganizationMembershipAdmin::NativeRequestFuture<$crate::OrganizationMembershipAdminAddMember> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::OrganizationMembershipAdminProvider>::add_member(plugin.as_ref(), context, request).await
+            })
+        }
+        fn list_members(&self, context: __LensoNativeSupportOrganizationMembershipAdmin::InvocationContext, request: $crate::ListMembersRequest) -> __LensoNativeSupportOrganizationMembershipAdmin::NativeRequestFuture<$crate::OrganizationMembershipAdminListMembers> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::OrganizationMembershipAdminProvider>::list_members(plugin.as_ref(), context, request).await
+            })
+        }
+        fn remove_member(&self, context: __LensoNativeSupportOrganizationMembershipAdmin::InvocationContext, request: $crate::RemoveMemberRequest) -> __LensoNativeSupportOrganizationMembershipAdmin::NativeRequestFuture<$crate::OrganizationMembershipAdminRemoveMember> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::OrganizationMembershipAdminProvider>::remove_member(plugin.as_ref(), context, request).await
+            })
+        }
+        }
+    };
+}
+
 #[derive(Debug)]
 struct OrganizationMembershipAdminRequestEndpoint { provider: Rc<dyn OrganizationMembershipAdminProvider> }
 
@@ -647,7 +727,7 @@ macro_rules! __lenso_native_provide_organization_membership_admin {
     }};
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct OrganizationMembershipAdminClient {
     add_member: NativeRequestHandle<OrganizationMembershipAdminAddMember>,
     list_members: NativeRequestHandle<OrganizationMembershipAdminListMembers>,
@@ -656,6 +736,13 @@ pub struct OrganizationMembershipAdminClient {
 impl OrganizationMembershipAdminClient {
     pub fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         <Self as CapabilityClient>::from_dependencies(dependencies)
+    }
+
+    pub fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        <Self as CapabilityClient>::from_requirement(dependencies, requirement_id)
     }
 
     pub async fn add_member(&self, request: AddMemberRequest) -> Result<AddMemberResponse, OrganizationMembershipAdminAddMemberInvocationError> {
@@ -710,6 +797,14 @@ impl CapabilityClient for OrganizationMembershipAdminClient {
         })
     }
 
+    fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::from_dependencies(&dependencies)
+    }
+
     fn already_connected() -> RuntimeFailure {
         RuntimeFailure::PluginFailure {
             detail: format!("Capability Port {CAPABILITY_ID} was connected more than once"),
@@ -736,6 +831,14 @@ impl CapabilityClientMany for OrganizationMembershipAdminClient {
                 ))
             })
             .collect()
+    }
+
+    fn many_from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Vec<BoundCapabilityClient<Self>>, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::many_from_dependencies(&dependencies)
     }
 }
 
