@@ -87,3 +87,15 @@ LENSO_POSTGRES_TEST_URL=postgres://... \
 Capability Descriptors are authoritative. Each contract crate rejects a stale
 generated Rust projection at build time. Invitations, Notification, HTTP/UI,
 and Audit remain separate Plugins and Capability edges.
+
+## Rust runtime compatibility
+
+This release uses Kernel 0.3, contract runtime 0.2 and generated native bindings
+from contract-codegen 0.9. Consumers must use the same runtime family as the
+current Agent and Auth providers. The public Rust package minor versions advance
+because Kernel types are part of their native API; existing Capability identities,
+operation schemas, authorization rules and database migrations are unchanged.
+
+Older package versions remain available for Kernel 0.2 applications. Update the
+participating native providers together instead of mixing both Kernel families in
+one linked App. No Git or local path override is needed by published consumers.

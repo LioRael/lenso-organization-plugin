@@ -3,13 +3,16 @@ use std::{fmt, rc::Rc};
 use futures::future::LocalBoxFuture;
 use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture, NativeRequestHandle, PluginDependencies, RequestCapability, RuntimeFailure};
 
-use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany};
+use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.organization-admin@2";
 pub const DESCRIPTOR_VERSION: &str = "1.1.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:3c87741b2f69deedcca731c07204ae595a89e5b637a952d20966480667f1954d";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const ORGANIZATION_ADMIN_CAPABILITY_ID: &str = CAPABILITY_ID;
 pub const ORGANIZATION_ADMIN_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VERSION;
+pub const ORGANIZATION_ADMIN_DESCRIPTOR_DIGEST: &str = DESCRIPTOR_DIGEST;
+pub const ORGANIZATION_ADMIN_CONTRACT: CapabilityReference<OrganizationAdminClient> = CapabilityReference::new(CAPABILITY_ID, DESCRIPTOR_VERSION, DESCRIPTOR_DIGEST);
 
 #[doc(hidden)]
 #[macro_export]
@@ -17,11 +20,23 @@ macro_rules! __lenso_provided_organization_admin { () => { "{\"capability_id\":\
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_organization_admin_client { () => { "{\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" }; }
+macro_rules! __lenso_required_organization_admin_client {
+    () => { "{\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}") };
+}
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_many_organization_admin_client { () => { "{\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" }; }
+macro_rules! __lenso_required_optional_organization_admin_client {
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"optional\"}") };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_required_many_organization_admin_client {
+    () => { "{\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.organization-admin@2\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}") };
+}
 
 pub const CREATE_ORGANIZATION_OPERATION: &str = "create_organization";
 pub const LIST_ORGANIZATIONS_OPERATION: &str = "list_organizations";
@@ -381,6 +396,56 @@ macro_rules! __lenso_native_lower_organization_admin {
     };
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_object_organization_admin {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportOrganizationAdmin;
+        impl $crate::OrganizationAdminProvider for $object {
+        fn create_organization(&self, context: __LensoNativeSupportOrganizationAdmin::InvocationContext, request: $crate::CreateOrganizationRequest) -> __LensoNativeSupportOrganizationAdmin::NativeRequestFuture<$crate::OrganizationAdminCreateOrganization> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::create_organization(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoOrganizationAdminCreateOrganizationResult::__lenso_into_result(result)
+            })
+        }
+        fn list_organizations(&self, context: __LensoNativeSupportOrganizationAdmin::InvocationContext, request: $crate::ListOrganizationsRequest) -> __LensoNativeSupportOrganizationAdmin::NativeRequestFuture<$crate::OrganizationAdminListOrganizations> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::list_organizations(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoOrganizationAdminListOrganizationsResult::__lenso_into_result(result)
+            })
+        }
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_trait_object_organization_admin {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportOrganizationAdmin;
+        impl $crate::OrganizationAdminProvider for $object {
+        fn create_organization(&self, context: __LensoNativeSupportOrganizationAdmin::InvocationContext, request: $crate::CreateOrganizationRequest) -> __LensoNativeSupportOrganizationAdmin::NativeRequestFuture<$crate::OrganizationAdminCreateOrganization> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::OrganizationAdminProvider>::create_organization(plugin.as_ref(), context, request).await
+            })
+        }
+        fn list_organizations(&self, context: __LensoNativeSupportOrganizationAdmin::InvocationContext, request: $crate::ListOrganizationsRequest) -> __LensoNativeSupportOrganizationAdmin::NativeRequestFuture<$crate::OrganizationAdminListOrganizations> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::OrganizationAdminProvider>::list_organizations(plugin.as_ref(), context, request).await
+            })
+        }
+        }
+    };
+}
+
 #[derive(Debug)]
 struct OrganizationAdminRequestEndpoint { provider: Rc<dyn OrganizationAdminProvider> }
 
@@ -465,7 +530,7 @@ macro_rules! __lenso_native_provide_organization_admin {
     }};
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct OrganizationAdminClient {
     create_organization: NativeRequestHandle<OrganizationAdminCreateOrganization>,
     list_organizations: NativeRequestHandle<OrganizationAdminListOrganizations>,
@@ -473,6 +538,13 @@ pub struct OrganizationAdminClient {
 impl OrganizationAdminClient {
     pub fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         <Self as CapabilityClient>::from_dependencies(dependencies)
+    }
+
+    pub fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        <Self as CapabilityClient>::from_requirement(dependencies, requirement_id)
     }
 
     pub async fn create_organization(&self, request: CreateOrganizationRequest) -> Result<CreateOrganizationResponse, OrganizationAdminCreateOrganizationInvocationError> {
@@ -514,6 +586,14 @@ impl CapabilityClient for OrganizationAdminClient {
         })
     }
 
+    fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::from_dependencies(&dependencies)
+    }
+
     fn already_connected() -> RuntimeFailure {
         RuntimeFailure::PluginFailure {
             detail: format!("Capability Port {CAPABILITY_ID} was connected more than once"),
@@ -539,6 +619,14 @@ impl CapabilityClientMany for OrganizationAdminClient {
                 ))
             })
             .collect()
+    }
+
+    fn many_from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Vec<BoundCapabilityClient<Self>>, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::many_from_dependencies(&dependencies)
     }
 }
 
