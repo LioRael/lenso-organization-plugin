@@ -51,3 +51,8 @@ cargo test --locked --workspace
 
 Run PostgreSQL acceptance with `LENSO_POSTGRES_TEST_URL` and
 `--include-ignored --test-threads=1` before any package becomes public.
+
+Confirmed manual dispatch publishes every unpublished version on `main`, including
+versions prepared in a compatibility PR. It does not require the current commit
+to have been authored by release-plz. The dry-run uses the same selection policy;
+`release_always` does not bypass the workflow ref, confirmation or OIDC gates.
