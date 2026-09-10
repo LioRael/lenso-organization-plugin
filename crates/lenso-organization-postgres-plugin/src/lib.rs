@@ -512,6 +512,55 @@ impl OrganizationMembershipAdminProvider for OrganizationProvider {
 }
 
 impl OrganizationDirectoryProvider for OrganizationProvider {
+    fn list_for_subject(
+        &self,
+        context: InvocationContext,
+        request: lenso_capability_organization_directory::ListForSubjectRequest,
+    ) -> NativeRequestFuture<
+        lenso_capability_organization_directory::OrganizationDirectoryListForSubject,
+    > {
+        use lenso_capability_organization_directory::{
+            ListForSubjectError, ListForSubjectResponse, Organization,
+        };
+        let authorized = self.authorized_directory_caller(&context).is_some();
+        let prepared = self.prepared();
+        Box::pin(async move {
+            if !authorized {
+                return Ok(Err(ListForSubjectError::Forbidden));
+            }
+            if !valid_name(&request.subject, 256)
+                || !(1..=100).contains(&request.limit)
+                || request
+                    .after
+                    .as_deref()
+                    .is_some_and(|s| !valid_name(s, 256))
+            {
+                return Ok(Err(ListForSubjectError::InvalidRequest));
+            }
+            let prepared = prepared?;
+            let rows: Vec<(String,String,String,i64)> = sqlx::query_as("SELECT o.organization_id,o.name,o.slug,o.revision FROM organizations o JOIN organization_memberships m ON m.organization_id=o.organization_id WHERE m.subject=$1 AND m.removed_at IS NULL AND o.archived_at IS NULL AND ($2::text IS NULL OR o.organization_id>$2) ORDER BY o.organization_id LIMIT $3")
+                .bind(&request.subject).bind(&request.after).bind(request.limit+1).fetch_all(prepared.postgres.pool()).await.map_err(|source| runtime(OrganizationError::Database {operation:"list member workspaces",source}))?;
+            let has_more = rows.len() > usize::try_from(request.limit).unwrap_or(100);
+            let items: Vec<_> = rows
+                .into_iter()
+                .take(usize::try_from(request.limit).unwrap_or(100))
+                .map(|(organization_id, name, slug, revision)| Organization {
+                    organization_id,
+                    name,
+                    slug,
+                    revision: revision.to_string(),
+                    active: true,
+                })
+                .collect();
+            let next_cursor = if has_more {
+                items.last().map(|o| o.organization_id.clone())
+            } else {
+                None
+            };
+            Ok(Ok(ListForSubjectResponse { items, next_cursor }))
+        })
+    }
+
     fn get_organization(
         &self,
         context: InvocationContext,
@@ -1764,6 +1813,88 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+        for (subject, expected) in [("usr_owner", 1), ("usr_unrelated", 0)] {
+            let listed = provider
+                .list_for_subject(
+                    InvocationContext::new(1, None, CancellationToken::new())
+                        .with_caller_instance("directory-consumer"),
+                    lenso_capability_organization_directory::ListForSubjectRequest {
+                        subject: subject.into(),
+                        after: None,
+                        limit: 10,
+                    },
+                )
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(listed.items.len(), expected);
+        }
+        let rejected = provider
+            .list_for_subject(
+                InvocationContext::new(1, None, CancellationToken::new())
+                    .with_caller_instance("untrusted"),
+                lenso_capability_organization_directory::ListForSubjectRequest {
+                    subject: "usr_owner".into(),
+                    after: None,
+                    limit: 10,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            rejected,
+            Err(lenso_capability_organization_directory::ListForSubjectError::Forbidden)
+        ));
+        for index in 0..2 {
+            provider
+                .create_organization(
+                    InvocationContext::new(1, None, CancellationToken::new())
+                        .with_caller_instance("business-admin"),
+                    CreateOrganizationRequest {
+                        idempotency_key: format!("page-{index}"),
+                        name: format!("Page {index}"),
+                        owner_subject: "usr_paged".into(),
+                        slug: format!("page-{index}"),
+                    },
+                )
+                .await
+                .unwrap()
+                .unwrap();
+        }
+        let first = provider
+            .list_for_subject(
+                InvocationContext::new(1, None, CancellationToken::new())
+                    .with_caller_instance("directory-consumer"),
+                lenso_capability_organization_directory::ListForSubjectRequest {
+                    subject: "usr_paged".into(),
+                    after: None,
+                    limit: 1,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(first.items.len(), 1);
+        assert!(first.next_cursor.is_some());
+        let second = provider
+            .list_for_subject(
+                InvocationContext::new(1, None, CancellationToken::new())
+                    .with_caller_instance("directory-consumer"),
+                lenso_capability_organization_directory::ListForSubjectRequest {
+                    subject: "usr_paged".into(),
+                    after: first.next_cursor,
+                    limit: 1,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(second.items.len(), 1);
+        assert!(second.next_cursor.is_none());
+        assert_ne!(
+            first.items[0].organization_id,
+            second.items[0].organization_id
+        );
         let directory_entry = provider
             .get_organization(
                 InvocationContext::new(2, None, CancellationToken::new())
@@ -1979,6 +2110,20 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+        let listed = provider
+            .list_for_subject(
+                InvocationContext::new(1, None, CancellationToken::new())
+                    .with_caller_instance("directory-consumer"),
+                lenso_capability_organization_directory::ListForSubjectRequest {
+                    subject: "usr_owner".into(),
+                    after: None,
+                    limit: 10,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(listed.items.is_empty());
         assert!(!archived_directory_entry.active);
         assert_eq!(archived_directory_entry.revision, "2");
 
