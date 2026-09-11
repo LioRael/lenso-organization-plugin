@@ -100,24 +100,21 @@ impl OrganizationConfig {
             return Err(OrganizationConfigError::InvalidSecretReference);
         }
         if self.admin_callers.is_empty()
-            || self
-                .admin_callers
-                .iter()
-                .any(|value| !valid_name(value, 256))
+            || self.admin_callers.iter().any(|value| !valid_caller(value))
         {
             return Err(OrganizationConfigError::InvalidAdminCallers);
         }
         if self
             .directory_callers
             .iter()
-            .any(|value| !valid_name(value, 256))
+            .any(|value| !valid_caller(value))
         {
             return Err(OrganizationConfigError::InvalidDirectoryCallers);
         }
         if self
             .membership_admin_callers
             .iter()
-            .any(|value| !valid_name(value, 256))
+            .any(|value| !valid_caller(value))
         {
             return Err(OrganizationConfigError::InvalidMembershipAdminCallers);
         }
@@ -2368,5 +2365,31 @@ mod tests {
             .await
             .unwrap();
         cleanup_pool.close().await;
+    }
+}
+
+// Preserve exact legacy keys while admitting canonical Plugin Root instance keys.
+fn valid_caller(value: &str) -> bool {
+    value.len() <= 256
+        && value.split('/').count() <= 2
+        && value
+            .split('/')
+            .all(|part| !matches!(part, "." | "..") && valid_name(part, 256))
+}
+
+#[test]
+fn caller_configuration_accepts_exact_plugin_root_keys_without_patterns() {
+    assert!(valid_caller("legacy-caller"));
+    assert!(valid_caller("lenso.projects.web/default"));
+    for invalid in [
+        "",
+        "/default",
+        "plugin/",
+        "plugin/a/b",
+        "plugin/*",
+        "plugin/..",
+        "plugin/ default",
+    ] {
+        assert!(!valid_caller(invalid), "unexpected caller {invalid}");
     }
 }
