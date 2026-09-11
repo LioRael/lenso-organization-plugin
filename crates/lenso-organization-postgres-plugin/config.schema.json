@@ -10,8 +10,7 @@
     "admin_callers": {
       "type": "array",
       "items": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:-]+(?:/[A-Za-z0-9._:-]+)?$"
+        "type": "string"
       }
     },
     "database_url_secret": {
@@ -20,16 +19,14 @@
     "directory_callers": {
       "type": "array",
       "items": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:-]+(?:/[A-Za-z0-9._:-]+)?$"
+        "type": "string"
       },
       "default": []
     },
     "membership_admin_callers": {
       "type": "array",
       "items": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:-]+(?:/[A-Za-z0-9._:-]+)?$"
+        "type": "string"
       },
       "default": []
     },
