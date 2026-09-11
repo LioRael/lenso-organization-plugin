@@ -8,6 +8,7 @@ repository.workspace = true
 description = "PostgreSQL-backed Organization Plugin for Lenso vNext."
 
 [dependencies]
+lenso-app-plan = "0.4.1"
 futures.workspace = true
 getrandom.workspace = true
 lenso-capability-organization-admin = { path = "../lenso-capability-organization-admin", version = "0.4.0" }
@@ -20,7 +21,7 @@ lenso-native-adapter.workspace = true
 lenso-postgres-kit.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sqlx.workspace = true
+
 thiserror.workspace = true
 zeroize.workspace = true
 

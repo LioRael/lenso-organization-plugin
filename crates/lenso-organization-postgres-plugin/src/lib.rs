@@ -34,8 +34,8 @@ use lenso_kernel::{
 };
 use lenso_native_adapter::{NativePluginFactory, NativePluginFactoryContext, NativePluginInstance};
 use lenso_postgres_kit::OwnedPostgres;
+use lenso_postgres_kit::sqlx::Row;
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 use thiserror::Error;
 use zeroize::Zeroizing;
 
@@ -141,6 +141,59 @@ pub enum OrganizationConfigError {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct OrganizationFactory;
+
+impl OrganizationFactory {
+    /// Publishes the manual native implementation's exact App composition boundary.
+    pub fn plugin_descriptor() -> lenso_app_plan::authoring::PluginDescriptor {
+        use lenso_app_plan::{CapabilityEndpointPlan, CapabilityRequirementPlan};
+        use lenso_capability_organization_admin as admin;
+        use lenso_capability_organization_directory as directory;
+        use lenso_capability_organization_membership as membership;
+        use lenso_capability_organization_membership_admin as members;
+        lenso_app_plan::authoring::PluginDescriptor::new(
+            PACKAGE_ID,
+            PACKAGE_VERSION,
+            "organization",
+        )
+        .with_configuration_schema(
+            serde_json::from_str(include_str!("../config.schema.json")).expect("embedded schema"),
+        )
+        .with_capability(CapabilityEndpointPlan::new(
+            admin::CAPABILITY_ID,
+            admin::DESCRIPTOR_VERSION,
+            [
+                admin::CREATE_ORGANIZATION_OPERATION,
+                admin::LIST_ORGANIZATIONS_OPERATION,
+            ],
+        ))
+        .with_capability(CapabilityEndpointPlan::new(
+            directory::CAPABILITY_ID,
+            directory::DESCRIPTOR_VERSION,
+            [
+                directory::GET_ORGANIZATION_OPERATION,
+                directory::LIST_FOR_SUBJECT_OPERATION,
+            ],
+        ))
+        .with_capability(CapabilityEndpointPlan::new(
+            membership::CAPABILITY_ID,
+            membership::DESCRIPTOR_VERSION,
+            [membership::CHECK_MEMBERSHIP_OPERATION],
+        ))
+        .with_capability(CapabilityEndpointPlan::new(
+            members::CAPABILITY_ID,
+            members::DESCRIPTOR_VERSION,
+            [
+                members::ADD_MEMBER_OPERATION,
+                members::LIST_MEMBERS_OPERATION,
+                members::REMOVE_MEMBER_OPERATION,
+            ],
+        ))
+        .with_requirement(CapabilityRequirementPlan::one(
+            lenso_capability_secrets::CAPABILITY_ID,
+            lenso_capability_secrets::DESCRIPTOR_VERSION,
+        ))
+    }
+}
 
 impl NativePluginFactory for OrganizationFactory {
     fn package_id(&self) -> &'static str {
@@ -298,7 +351,7 @@ impl OrganizationAdminProvider for OrganizationProvider {
                 ListOrganizationsRequestStatus::Archived => "archived",
                 ListOrganizationsRequestStatus::All => "all",
             };
-            let rows: Vec<(String, String, String, bool, i64)> = sqlx::query_as(
+            let rows: Vec<(String, String, String, bool, i64)> = lenso_postgres_kit::sqlx::query_as(
                 "SELECT organization_id,name,slug,archived_at IS NULL,revision FROM organizations WHERE ($1='all' OR ($1='active' AND archived_at IS NULL) OR ($1='archived' AND archived_at IS NOT NULL)) AND ($2::text IS NULL OR slug=$2) AND ($3::text IS NULL OR organization_id>$3) ORDER BY organization_id LIMIT $4",
             )
             .bind(status)
@@ -398,11 +451,13 @@ impl OrganizationMembershipAdminProvider for OrganizationProvider {
                 .begin()
                 .await
                 .map_err(|source| database_runtime("begin Organization member list", source))?;
-            sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-                .execute(&mut *transaction)
-                .await
-                .map_err(|source| database_runtime("establish member list snapshot", source))?;
-            let organization_exists = sqlx::query_scalar::<_, bool>(
+            lenso_postgres_kit::sqlx::query(
+                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+            )
+            .execute(&mut *transaction)
+            .await
+            .map_err(|source| database_runtime("establish member list snapshot", source))?;
+            let organization_exists = lenso_postgres_kit::sqlx::query_scalar::<_, bool>(
                 "SELECT true FROM organizations WHERE organization_id=$1",
             )
             .bind(&request.organization_id)
@@ -418,7 +473,7 @@ impl OrganizationMembershipAdminProvider for OrganizationProvider {
                 ListMembersRequestStatus::Removed => "removed",
                 ListMembersRequestStatus::All => "all",
             };
-            let rows: Vec<(String, String, bool, bool, i64)> = sqlx::query_as(
+            let rows: Vec<(String, String, bool, bool, i64)> = lenso_postgres_kit::sqlx::query_as(
                 "SELECT membership_id,subject,is_owner,removed_at IS NULL,revision FROM organization_memberships WHERE organization_id=$1 AND ($2='all' OR ($2='active' AND removed_at IS NULL) OR ($2='removed' AND removed_at IS NOT NULL)) AND ($3::text IS NULL OR subject=$3) AND ($4::text IS NULL OR membership_id>$4) ORDER BY membership_id LIMIT $5",
             )
             .bind(&request.organization_id)
@@ -538,7 +593,7 @@ impl OrganizationDirectoryProvider for OrganizationProvider {
                 return Ok(Err(ListForSubjectError::InvalidRequest));
             }
             let prepared = prepared?;
-            let rows: Vec<(String,String,String,i64)> = sqlx::query_as("SELECT o.organization_id,o.name,o.slug,o.revision FROM organizations o JOIN organization_memberships m ON m.organization_id=o.organization_id WHERE m.subject=$1 AND m.removed_at IS NULL AND o.archived_at IS NULL AND ($2::text IS NULL OR o.organization_id>$2) ORDER BY o.organization_id LIMIT $3")
+            let rows: Vec<(String,String,String,i64)> = lenso_postgres_kit::sqlx::query_as("SELECT o.organization_id,o.name,o.slug,o.revision FROM organizations o JOIN organization_memberships m ON m.organization_id=o.organization_id WHERE m.subject=$1 AND m.removed_at IS NULL AND o.archived_at IS NULL AND ($2::text IS NULL OR o.organization_id>$2) ORDER BY o.organization_id LIMIT $3")
                 .bind(&request.subject).bind(&request.after).bind(request.limit+1).fetch_all(prepared.postgres.pool()).await.map_err(|source| runtime(OrganizationError::Database {operation:"list member workspaces",source}))?;
             let has_more = rows.len() > usize::try_from(request.limit).unwrap_or(100);
             let items: Vec<_> = rows
@@ -576,7 +631,7 @@ impl OrganizationDirectoryProvider for OrganizationProvider {
                 return Ok(Err(GetOrganizationError::InvalidRequest));
             }
             let prepared = prepared?;
-            let row: Option<(String, String, bool, i64)> = sqlx::query_as(
+            let row: Option<(String, String, bool, i64)> = lenso_postgres_kit::sqlx::query_as(
                 "SELECT name,slug,archived_at IS NULL,revision FROM organizations WHERE organization_id=$1",
             )
             .bind(&request.organization_id)
@@ -662,7 +717,7 @@ async fn add_member_in_postgres(
     if !lock_active_organization(&mut transaction, &request.organization_id).await? {
         return Ok(Err(AddMemberError::OrganizationNotFound));
     }
-    let existing: Option<(String, i64)> = sqlx::query_as(
+    let existing: Option<(String, i64)> = lenso_postgres_kit::sqlx::query_as(
         "SELECT membership_id,revision FROM organization_memberships WHERE organization_id=$1 AND subject=$2 AND removed_at IS NULL FOR UPDATE",
     )
     .bind(&request.organization_id)
@@ -678,7 +733,7 @@ async fn add_member_in_postgres(
     let (membership_id, revision, created) = if let Some((membership_id, revision)) = existing {
         (membership_id, revision, false)
     } else {
-        sqlx::query(
+        lenso_postgres_kit::sqlx::query(
             "INSERT INTO organization_memberships (membership_id,organization_id,subject,is_owner,revision) VALUES ($1,$2,$3,false,1)",
         )
         .bind(&generated_membership_id)
@@ -764,7 +819,7 @@ async fn remove_member_in_postgres(
     if !lock_active_organization(&mut transaction, &request.organization_id).await? {
         return Ok(Err(RemoveMemberError::OrganizationNotFound));
     }
-    let existing: Option<(String, bool, i64)> = sqlx::query_as(
+    let existing: Option<(String, bool, i64)> = lenso_postgres_kit::sqlx::query_as(
         "SELECT membership_id,is_owner,revision FROM organization_memberships WHERE organization_id=$1 AND subject=$2 AND removed_at IS NULL FOR UPDATE",
     )
     .bind(&request.organization_id)
@@ -784,7 +839,7 @@ async fn remove_member_in_postgres(
         return Ok(Err(RemoveMemberError::OwnerProtected));
     }
     let next_revision = next_membership_revision(revision)?;
-    sqlx::query(
+    lenso_postgres_kit::sqlx::query(
         "UPDATE organization_memberships SET removed_at=transaction_timestamp(),updated_at=transaction_timestamp(),revision=$3 WHERE organization_id=$1 AND membership_id=$2 AND removed_at IS NULL",
     )
     .bind(&request.organization_id)
@@ -819,14 +874,14 @@ async fn remove_member_in_postgres(
 }
 
 async fn reserve_membership_command(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut lenso_postgres_kit::sqlx::Transaction<'_, lenso_postgres_kit::sqlx::Postgres>,
     caller_instance: &str,
     idempotency_key: &str,
     operation: &str,
     organization_id: &str,
     subject: &str,
 ) -> Result<bool, RuntimeFailure> {
-    sqlx::query(
+    lenso_postgres_kit::sqlx::query(
         "INSERT INTO organization_membership_commands (caller_instance,idempotency_key,operation,organization_id,subject) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (caller_instance,idempotency_key) DO NOTHING",
     )
     .bind(caller_instance)
@@ -846,7 +901,7 @@ async fn reserve_membership_command(
 }
 
 async fn read_membership_command_replay(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut lenso_postgres_kit::sqlx::Transaction<'_, lenso_postgres_kit::sqlx::Postgres>,
     caller_instance: &str,
     idempotency_key: &str,
     operation: &str,
@@ -860,7 +915,7 @@ async fn read_membership_command_replay(
         Option<String>,
         Option<i64>,
         Option<bool>,
-    ) = sqlx::query_as(
+    ) = lenso_postgres_kit::sqlx::query_as(
         "SELECT operation,organization_id,subject,membership_id,result_revision,changed FROM organization_membership_commands WHERE caller_instance=$1 AND idempotency_key=$2 FOR UPDATE",
     )
     .bind(caller_instance)
@@ -888,14 +943,14 @@ async fn read_membership_command_replay(
 }
 
 async fn complete_membership_command(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut lenso_postgres_kit::sqlx::Transaction<'_, lenso_postgres_kit::sqlx::Postgres>,
     caller_instance: &str,
     idempotency_key: &str,
     membership_id: &str,
     revision: i64,
     changed: bool,
 ) -> Result<(), RuntimeFailure> {
-    sqlx::query(
+    lenso_postgres_kit::sqlx::query(
         "UPDATE organization_membership_commands SET membership_id=$3,result_revision=$4,changed=$5,completed_at=transaction_timestamp() WHERE caller_instance=$1 AND idempotency_key=$2 AND completed_at IS NULL",
     )
     .bind(caller_instance)
@@ -909,7 +964,7 @@ async fn complete_membership_command(
         if result.rows_affected() == 1 {
             Ok(result)
         } else {
-            Err(sqlx::Error::RowNotFound)
+            Err(lenso_postgres_kit::sqlx::Error::RowNotFound)
         }
     })
     .map(|_| ())
@@ -922,10 +977,10 @@ async fn complete_membership_command(
 }
 
 async fn lock_active_organization(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut lenso_postgres_kit::sqlx::Transaction<'_, lenso_postgres_kit::sqlx::Postgres>,
     organization_id: &str,
 ) -> Result<bool, RuntimeFailure> {
-    sqlx::query_scalar::<_, bool>(
+    lenso_postgres_kit::sqlx::query_scalar::<_, bool>(
         "SELECT archived_at IS NULL FROM organizations WHERE organization_id=$1 FOR UPDATE",
     )
     .bind(organization_id)
@@ -1008,14 +1063,14 @@ async fn create_organization_in_postgres(
 }
 
 async fn reserve_creation(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut lenso_postgres_kit::sqlx::Transaction<'_, lenso_postgres_kit::sqlx::Postgres>,
     caller_instance: &str,
     request: &CreateOrganizationRequest,
     name: &str,
     organization_id: &str,
     owner_membership_id: &str,
 ) -> Result<bool, RuntimeFailure> {
-    sqlx::query(
+    lenso_postgres_kit::sqlx::query(
         "INSERT INTO organization_creation_requests (caller_instance,idempotency_key,name,slug,owner_subject,organization_id,owner_membership_id) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (caller_instance,idempotency_key) DO NOTHING",
     )
     .bind(caller_instance)
@@ -1037,7 +1092,7 @@ async fn reserve_creation(
 }
 
 async fn read_creation_replay(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut lenso_postgres_kit::sqlx::Transaction<'_, lenso_postgres_kit::sqlx::Postgres>,
     caller_instance: &str,
     request: &CreateOrganizationRequest,
     name: &str,
@@ -1048,7 +1103,7 @@ async fn read_creation_replay(
         String,
         String,
         String,
-    ) = sqlx::query_as(
+    ) = lenso_postgres_kit::sqlx::query_as(
         "SELECT name,slug,owner_subject,organization_id,owner_membership_id FROM organization_creation_requests WHERE caller_instance=$1 AND idempotency_key=$2",
     )
     .bind(caller_instance)
@@ -1072,19 +1127,20 @@ async fn read_creation_replay(
 }
 
 async fn insert_organization_and_owner(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut lenso_postgres_kit::sqlx::Transaction<'_, lenso_postgres_kit::sqlx::Postgres>,
     request: &CreateOrganizationRequest,
     name: &str,
     organization_id: &str,
     owner_membership_id: &str,
 ) -> Result<Result<(), CreateOrganizationError>, RuntimeFailure> {
-    let inserted =
-        sqlx::query("INSERT INTO organizations (organization_id,name,slug) VALUES ($1,$2,$3)")
-            .bind(organization_id)
-            .bind(name)
-            .bind(&request.slug)
-            .execute(&mut **transaction)
-            .await;
+    let inserted = lenso_postgres_kit::sqlx::query(
+        "INSERT INTO organizations (organization_id,name,slug) VALUES ($1,$2,$3)",
+    )
+    .bind(organization_id)
+    .bind(name)
+    .bind(&request.slug)
+    .execute(&mut **transaction)
+    .await;
     if let Err(error) = inserted {
         if error
             .as_database_error()
@@ -1098,7 +1154,7 @@ async fn insert_organization_and_owner(
             source: error,
         }));
     }
-    sqlx::query("INSERT INTO organization_memberships (membership_id,organization_id,subject,is_owner) VALUES ($1,$2,$3,true)")
+    lenso_postgres_kit::sqlx::query("INSERT INTO organization_memberships (membership_id,organization_id,subject,is_owner) VALUES ($1,$2,$3,true)")
         .bind(owner_membership_id)
         .bind(organization_id)
         .bind(&request.owner_subject)
@@ -1120,7 +1176,7 @@ impl OrganizationMembershipProvider for OrganizationProvider {
                 return Ok(Err(CheckMembershipError::InvalidRequest));
             }
             let prepared = prepared?;
-            let row = sqlx::query(
+            let row = lenso_postgres_kit::sqlx::query(
                 "SELECT EXISTS(SELECT 1 FROM organizations WHERE organization_id=$1 AND archived_at IS NULL) AS organization_exists, COALESCE((SELECT removed_at IS NULL FROM organization_memberships WHERE organization_id=$1 AND subject=$2 ORDER BY created_at DESC LIMIT 1),false) AS active, COALESCE((SELECT is_owner AND removed_at IS NULL FROM organization_memberships WHERE organization_id=$1 AND subject=$2 ORDER BY created_at DESC LIMIT 1),false) AS owner",
             )
             .bind(&request.organization_id)
@@ -1223,7 +1279,7 @@ enum OrganizationError {
     Database {
         operation: &'static str,
         #[source]
-        source: sqlx::Error,
+        source: lenso_postgres_kit::sqlx::Error,
     },
     #[error("random source unavailable")]
     Random,
@@ -1237,7 +1293,10 @@ fn runtime(error: impl fmt::Display) -> RuntimeFailure {
     }
 }
 
-fn database_runtime(operation: &'static str, source: sqlx::Error) -> RuntimeFailure {
+fn database_runtime(
+    operation: &'static str,
+    source: lenso_postgres_kit::sqlx::Error,
+) -> RuntimeFailure {
     runtime(OrganizationError::Database { operation, source })
 }
 
@@ -1305,8 +1364,8 @@ fn valid_secret_reference(reference: &str) -> bool {
 mod tests {
     use super::*;
     use lenso_kernel::CancellationToken;
+    use lenso_postgres_kit::sqlx::{AssertSqlSafe, Executor};
     use lenso_postgres_kit::{Migration, SchemaOperator, SchemaPlan};
-    use sqlx::{AssertSqlSafe, Executor};
 
     const LEGACY_MIGRATIONS: &[Migration] = &[Migration::new(
         1,
@@ -1766,7 +1825,9 @@ mod tests {
             .unwrap();
         assert_eq!(duplicate, Err(CreateOrganizationError::SlugConflict));
 
-        let cleanup_pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+        let cleanup_pool = lenso_postgres_kit::sqlx::PgPool::connect(&database_url)
+            .await
+            .unwrap();
         cleanup_pool
             .execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))
             .await
@@ -2092,7 +2153,7 @@ mod tests {
         assert!(!removed_members.members[0].active);
 
         let prepared = provider.prepared().unwrap();
-        sqlx::query(
+        lenso_postgres_kit::sqlx::query(
             "UPDATE organizations SET archived_at=transaction_timestamp(),revision=2 WHERE organization_id=$1",
         )
         .bind(&organization.organization_id)
@@ -2211,7 +2272,9 @@ mod tests {
         );
 
         prepared.postgres.pool().close().await;
-        let cleanup_pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+        let cleanup_pool = lenso_postgres_kit::sqlx::PgPool::connect(&database_url)
+            .await
+            .unwrap();
         cleanup_pool
             .execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))
             .await
@@ -2235,15 +2298,15 @@ mod tests {
             .await
             .unwrap();
 
-        sqlx::query("INSERT INTO organizations (organization_id,name,slug) VALUES ('org_good','Good','good'),('org_bad','Bad','bad')")
+        lenso_postgres_kit::sqlx::query("INSERT INTO organizations (organization_id,name,slug) VALUES ('org_good','Good','good'),('org_bad','Bad','bad')")
             .execute(legacy.pool())
             .await
             .unwrap();
-        sqlx::query("INSERT INTO organization_roles (role_id,organization_id,name,permissions,system_key) VALUES ('role_good','org_good','Owner',ARRAY['organization.read'],'owner'),('role_bad','org_bad','Member',ARRAY['organization.read'],NULL)")
+        lenso_postgres_kit::sqlx::query("INSERT INTO organization_roles (role_id,organization_id,name,permissions,system_key) VALUES ('role_good','org_good','Owner',ARRAY['organization.read'],'owner'),('role_bad','org_bad','Member',ARRAY['organization.read'],NULL)")
             .execute(legacy.pool())
             .await
             .unwrap();
-        sqlx::query("INSERT INTO organization_memberships (membership_id,organization_id,subject,role_id) VALUES ('membership_good','org_good','usr_good','role_good'),('membership_bad','org_bad','usr_bad','role_bad')")
+        lenso_postgres_kit::sqlx::query("INSERT INTO organization_memberships (membership_id,organization_id,subject,role_id) VALUES ('membership_good','org_good','usr_good','role_good'),('membership_bad','org_bad','usr_bad','role_bad')")
             .execute(legacy.pool())
             .await
             .unwrap();
@@ -2253,17 +2316,20 @@ mod tests {
                 .await
                 .is_err()
         );
-        let legacy_roles_remain: bool =
-            sqlx::query_scalar("SELECT to_regclass('organization_roles') IS NOT NULL")
-                .fetch_one(legacy.pool())
-                .await
-                .unwrap();
+        let legacy_roles_remain: bool = lenso_postgres_kit::sqlx::query_scalar(
+            "SELECT to_regclass('organization_roles') IS NOT NULL",
+        )
+        .fetch_one(legacy.pool())
+        .await
+        .unwrap();
         assert!(legacy_roles_remain);
 
-        sqlx::query("UPDATE organization_roles SET system_key='owner' WHERE role_id='role_bad'")
-            .execute(legacy.pool())
-            .await
-            .unwrap();
+        lenso_postgres_kit::sqlx::query(
+            "UPDATE organization_roles SET system_key='owner' WHERE role_id='role_bad'",
+        )
+        .execute(legacy.pool())
+        .await
+        .unwrap();
         legacy.pool().close().await;
         OrganizationOperator::upgrade(&database_url, &schema)
             .await
@@ -2271,28 +2337,32 @@ mod tests {
         let upgraded = OwnedPostgres::prepare(&database_url, schema_plan(schema.clone()).unwrap())
             .await
             .unwrap();
-        let owner_count: i64 = sqlx::query_scalar(
+        let owner_count: i64 = lenso_postgres_kit::sqlx::query_scalar(
             "SELECT count(*) FROM organization_memberships WHERE removed_at IS NULL AND is_owner",
         )
         .fetch_one(upgraded.pool())
         .await
         .unwrap();
         assert_eq!(owner_count, 2);
-        let legacy_roles_remain: bool =
-            sqlx::query_scalar("SELECT to_regclass('organization_roles') IS NOT NULL")
-                .fetch_one(upgraded.pool())
-                .await
-                .unwrap();
+        let legacy_roles_remain: bool = lenso_postgres_kit::sqlx::query_scalar(
+            "SELECT to_regclass('organization_roles') IS NOT NULL",
+        )
+        .fetch_one(upgraded.pool())
+        .await
+        .unwrap();
         assert!(!legacy_roles_remain);
-        let creation_receipts_exist: bool =
-            sqlx::query_scalar("SELECT to_regclass('organization_creation_requests') IS NOT NULL")
-                .fetch_one(upgraded.pool())
-                .await
-                .unwrap();
+        let creation_receipts_exist: bool = lenso_postgres_kit::sqlx::query_scalar(
+            "SELECT to_regclass('organization_creation_requests') IS NOT NULL",
+        )
+        .fetch_one(upgraded.pool())
+        .await
+        .unwrap();
         assert!(creation_receipts_exist);
 
         upgraded.pool().close().await;
-        let cleanup_pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+        let cleanup_pool = lenso_postgres_kit::sqlx::PgPool::connect(&database_url)
+            .await
+            .unwrap();
         cleanup_pool
             .execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))
             .await
